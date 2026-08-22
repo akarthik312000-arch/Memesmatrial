@@ -1,5 +1,5 @@
 export interface VideoSpec {
-  duration: 60;
+  duration: 25;
   width: 1920;
   height: 1080;
   fps: 30;

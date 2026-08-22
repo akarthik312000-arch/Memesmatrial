@@ -27,7 +27,7 @@ const FONT_DISPLAY = "D\\:/job/memesmaterial-studio/assets/fonts/bebas.ttf";
 const FONT_SERIF_I = "D\\:/job/memesmaterial-studio/assets/fonts/ptserif-italic.ttf";
 const FONT_SCRIPT = "D\\:/job/memesmaterial-studio/assets/fonts/greatvibes.ttf";
 const SCENE_SEC = 6; // snappier meme pacing
-const TOTAL_SEC = 60; // output is always exactly 60s; per-scene = 60 / scene count
+const TOTAL_SEC = 25; // output is always exactly 25s; per-scene = 25 / scene count
 // animated gradient color pairs [from, to] per scene
 const GRAD = [
   ["0x141432", "0x5a2ab8"],
@@ -532,7 +532,7 @@ async function renderVideo(
   const setDir = join(bgRoot, `set-${Date.now()}`);
   const { paths: bgs, source: bgSource } = await generateAiSceneSet(setDir, scenes, form, character);
 
-  // per-scene duration adapts to scene count so total is always exactly 60s
+  // per-scene duration adapts to scene count so total is always exactly 25s
   const secPerScene = TOTAL_SEC / scenes.length;
   scenes.forEach((s) => { s.duration = secPerScene; });
   const total = TOTAL_SEC;
@@ -716,7 +716,7 @@ export async function POST(req: NextRequest) {
       scenes,
       mp4Path: publicPath,
       url: `/generated/${finalName}`,
-      duration: 60,
+      duration: TOTAL_SEC,
       status: "ready",
       createdAt: new Date().toISOString(),
       youtube: youtubeData(form, concept),

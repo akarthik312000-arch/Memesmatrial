@@ -41,7 +41,7 @@ export default function Home() {
           <p className="mt-4 max-w-lg text-base leading-7 text-[#a9a4b7]">A complete 60-second meme video, from one loose idea to a finished MP4.</p>
         </div>
         <div className="flex gap-3 text-xs font-bold text-[#a9a4b7]">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">60s</span>fixed format</div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">25s</span>fixed format</div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">1080p</span>export ready</div>
         </div>
       </div>
@@ -111,7 +111,7 @@ export default function Home() {
 
           <div>
             <label className="mb-2 block text-xs font-black uppercase tracking-wider text-[#a9a4b7]">Duration</label>
-            <div className="studio-input flex items-center justify-between"><span className="font-bold">60 seconds</span><span className="text-xs text-[#40df86]">Fixed format</span></div>
+            <div className="studio-input flex items-center justify-between"><span className="font-bold">25 seconds</span><span className="text-xs text-[#40df86]">Fixed format</span></div>
           </div>
         </div>
 
