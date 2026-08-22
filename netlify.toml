@@ -11,4 +11,6 @@
   node_bundler = "esbuild"
   included_files = ["node_modules/ffmpeg-static/ffmpeg"]
   external_node_modules = ["ffmpeg-static"]
+
+[functions."*"]
   timeout = 600
