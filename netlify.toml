@@ -13,4 +13,4 @@
   external_node_modules = ["ffmpeg-static"]
 
 [functions."*"]
-  timeout = 600
+  timeout = 25
