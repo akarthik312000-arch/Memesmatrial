@@ -8,6 +8,7 @@ export default function Home() {
     category: "Everyday Life",
     language: "English",
     style: "Meme",
+    durationSec: 25,
   });
 
   const [status, setStatus] = useState<"idle" | "generating" | "ready">("idle");
@@ -38,10 +39,10 @@ export default function Home() {
         <div>
           <p className="mb-3 text-xs font-black uppercase tracking-[0.28em] text-[#ff8f87]">Dashboard / New project</p>
           <h1 className="max-w-xl text-4xl font-black leading-[0.98] tracking-tight sm:text-5xl md:text-6xl">Make something <span className="text-[#a970ff]">worth sharing.</span></h1>
-          <p className="mt-4 max-w-lg text-base leading-7 text-[#a9a4b7]">A complete 60-second meme video, from one loose idea to a finished MP4.</p>
+          <p className="mt-4 max-w-lg text-base leading-7 text-[#a9a4b7]">A complete 25 or 60-second meme video, from one loose idea to a finished MP4.</p>
         </div>
         <div className="flex gap-3 text-xs font-bold text-[#a9a4b7]">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">25s</span>fixed format</div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">25s / 60s</span>pick a format</div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">1080p</span>export ready</div>
         </div>
       </div>
@@ -111,7 +112,14 @@ export default function Home() {
 
           <div>
             <label className="mb-2 block text-xs font-black uppercase tracking-wider text-[#a9a4b7]">Duration</label>
-            <div className="studio-input flex items-center justify-between"><span className="font-bold">25 seconds</span><span className="text-xs text-[#40df86]">Fixed format</span></div>
+            <select
+              value={form.durationSec}
+              onChange={(e) => setForm({ ...form, durationSec: Number(e.target.value) as 25 | 60 })}
+              className="studio-input"
+            >
+              <option value={25}>25 seconds</option>
+              <option value={60}>60 seconds</option>
+            </select>
           </div>
         </div>
 
@@ -120,7 +128,7 @@ export default function Home() {
           disabled={status === "generating"}
           className="btn mt-7 w-full py-4 transition-all"
         >
-          {status === "generating" ? "Generating..." : "CREATE 60-SECOND VIDEO"}
+          {status === "generating" ? "Generating..." : `CREATE ${form.durationSec === 60 ? "60" : "25"}-SECOND VIDEO`}
         </button>
         </div>
         <div className="relative hidden overflow-hidden border-l border-white/10 bg-gradient-to-br from-[#5125a8] via-[#a63ed4] to-[#ff625e] p-8 lg:block">

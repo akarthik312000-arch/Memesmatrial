@@ -27,7 +27,8 @@ const FONT_DISPLAY = "D\\:/job/memesmaterial-studio/assets/fonts/bebas.ttf";
 const FONT_SERIF_I = "D\\:/job/memesmaterial-studio/assets/fonts/ptserif-italic.ttf";
 const FONT_SCRIPT = "D\\:/job/memesmaterial-studio/assets/fonts/greatvibes.ttf";
 const SCENE_SEC = 6; // snappier meme pacing
-const TOTAL_SEC = 25; // output is always exactly 25s; per-scene = 25 / scene count
+const TOTAL_SEC = 25; // default output duration; per-scene = total / scene count
+const ALLOWED_TOTALS = [25, 60] as const;
 // animated gradient color pairs [from, to] per scene
 const GRAD = [
   ["0x141432", "0x5a2ab8"],
@@ -519,7 +520,8 @@ async function renderVideo(
   scenes: Array<Scene & { _sub?: string; _visual?: string }>,
   form: VideoCreationForm,
   character: string | undefined,
-  finalPath: string
+  finalPath: string,
+  totalSec: number
 ): Promise<{ bgSource: string }> {
   const wav = join(dir, "narration.wav");
   await tts(
@@ -532,10 +534,10 @@ async function renderVideo(
   const setDir = join(bgRoot, `set-${Date.now()}`);
   const { paths: bgs, source: bgSource } = await generateAiSceneSet(setDir, scenes, form, character);
 
-  // per-scene duration adapts to scene count so total is always exactly 25s
-  const secPerScene = TOTAL_SEC / scenes.length;
+  // per-scene duration adapts to scene count so total matches the requested duration
+  const secPerScene = totalSec / scenes.length;
   scenes.forEach((s) => { s.duration = secPerScene; });
-  const total = TOTAL_SEC;
+  const total = totalSec;
 
   const chains: string[] = [];
   scenes.forEach((sc, i) => {
@@ -668,6 +670,9 @@ export async function POST(req: NextRequest) {
   }
 
   const tmpDir = join(process.cwd(), "generated-videos", `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const totalSec = (ALLOWED_TOTALS as readonly number[]).includes(form.durationSec ?? TOTAL_SEC)
+    ? form.durationSec ?? TOTAL_SEC
+    : TOTAL_SEC;
 
   try {
     // AI-generated concept via OpenRouter free models; falls back to templates
@@ -694,7 +699,7 @@ export async function POST(req: NextRequest) {
 
     const finalName = `video-${id}.mp4`;
     const tmpFinal = join(tmpDir, "final.mp4");
-    const { bgSource } = await renderVideo(tmpDir, scenes, form, concept.character, tmpFinal);
+    const { bgSource } = await renderVideo(tmpDir, scenes, form, concept.character, tmpFinal, totalSec);
 
     const validation = validate(tmpFinal);
     if (!validation.valid) {
@@ -716,7 +721,7 @@ export async function POST(req: NextRequest) {
       scenes,
       mp4Path: publicPath,
       url: `/generated/${finalName}`,
-      duration: TOTAL_SEC,
+      duration: totalSec,
       status: "ready",
       createdAt: new Date().toISOString(),
       youtube: youtubeData(form, concept),

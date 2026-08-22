@@ -5,7 +5,7 @@ import { Sidebar } from "@/components/ui/sidebar";
 
 export const metadata: Metadata = {
   title: "MemesMaterial Studio - AI Meme Video Creator",
-  description: "Create 60-second meme videos for YouTube channel MemesMaterial",
+  description: "Create 25/60-second meme videos for YouTube channel MemesMaterial",
 };
 
 export default function RootLayout({

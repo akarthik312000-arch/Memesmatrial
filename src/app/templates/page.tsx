@@ -4,7 +4,7 @@ export default function Templates() {
       <h1 className="text-4xl font-bold mb-6">Templates</h1>
       <p className="text-gray-400 mb-6">
         Meme video templates for rapid creation. Select a template and customize
-        the topic, style, and language to generate a complete 60-second video.
+        the topic, style, and language to generate a complete 25 or 60-second video.
       </p>
 
       <div className="grid grid-cols-2 gap-6">

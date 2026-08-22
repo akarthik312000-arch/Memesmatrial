@@ -1,5 +1,5 @@
 export interface VideoSpec {
-  duration: 25;
+  duration: number;
   width: 1920;
   height: 1080;
   fps: 30;
@@ -12,6 +12,7 @@ export interface VideoCreationForm {
   category: "Everyday Life" | "Lifestyle" | "Technology" | "AI" | "Work/Office" | "College" | "Friendship" | "Family" | "Relationships" | "Gaming" | "Movies/pop culture" | "Internet/social media" | "Indian/South Indian culture" | "Travel" | "Vehicles" | "Random fun" | "Thoughts" | "Opinions" | "Ideas" | "Trends" | "Other";
   language: "English" | "Tamil-English" | "Hinglish";
   style: "Meme" | "Cinematic Meme" | "Reaction" | "Story" | "Absurd" | "Relatable";
+  durationSec?: 25 | 60;
 }
 
 export interface Scene {
