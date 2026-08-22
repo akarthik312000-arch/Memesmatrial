@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["node_modules/ffmpeg-static/ffmpeg"]
+  external_node_modules = ["ffmpeg-static"]
+  timeout = 600

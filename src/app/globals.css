@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+:root {
+  --background: #100e18;
+  --foreground: #f8f7fb;
+  --panel: #191622;
+  --panel-soft: #211d2d;
+  --line: rgba(255, 255, 255, 0.1);
+  --muted: #a9a4b7;
+  --violet: #8b5cf6;
+  --coral: #ff625e;
+  --lime: #40df86;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+body {
+  min-width: 320px;
+  background-image: radial-gradient(circle at 78% 0%, rgba(139, 92, 246, 0.16), transparent 30rem),
+    linear-gradient(135deg, #100e18 0%, #15111f 52%, #1b161e 100%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.studio-panel {
+  background: linear-gradient(145deg, rgba(33, 29, 45, 0.96), rgba(22, 19, 31, 0.96));
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+}
+
+.studio-input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.7rem;
+  background: rgba(10, 8, 16, 0.52);
+  color: var(--foreground);
+  padding: 0.8rem 0.95rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.studio-input:focus {
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18);
+}
+
+.btn {
+  border-radius: 0.7rem;
+  background: linear-gradient(100deg, var(--coral), #ff9062);
+  color: #1a1017;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 10px 24px rgba(255, 98, 94, 0.2);
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
