@@ -5,13 +5,9 @@ import { join } from "path";
 import ffmpegPath from "ffmpeg-static";
 import { existsSync as fileExists } from "fs";
 import { generateAiImage } from "@/lib/ai-image";
+import { workDir, fontFile } from "@/lib/runtime";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
-
-const FONT_DISPLAY = "D\\:/job/memesmaterial-studio/assets/fonts/bebas.ttf";
-const FONT_SERIF_I = "D\\:/job/memesmaterial-studio/assets/fonts/ptserif-italic.ttf";
-const FONT_SCRIPT = "D\\:/job/memesmaterial-studio/assets/fonts/greatvibes.ttf";
 
 function resolveFfmpeg(): string {
   if (ffmpegPath && fileExists(ffmpegPath)) return ffmpegPath;
@@ -21,6 +17,9 @@ function resolveFfmpeg(): string {
   throw new Error("FFmpeg binary not found");
 }
 const FFMPEG = resolveFfmpeg();
+const FONT_DISPLAY = fontFile("bebas.ttf");
+const FONT_SERIF_I = fontFile("ptserif-italic.ttf");
+const FONT_SCRIPT = fontFile("greatvibes.ttf");
 
 function escDraw(t: string): string {
   return t.replace(/\\/g, "\\\\").replace(/'/g, "\u2019").replace(/:/g, "\\:");
@@ -48,7 +47,8 @@ function runProc(cmd: string, args: string[], timeoutMs: number): Promise<void> 
     const timer = setTimeout(() => { p.kill(); reject(new Error("timeout")); }, timeoutMs);
     p.on("close", (code) => {
       clearTimeout(timer);
-      code === 0 ? resolve() : reject(new Error(err.slice(-400)));
+      if (code === 0) resolve();
+      else reject(new Error(err.slice(-400)));
     });
   });
 }
@@ -65,7 +65,7 @@ async function makeScene(dir: string): Promise<string> {
 /** delete background temp sets older than 30 minutes */
 function cleanupOldSets() {
   try {
-    const root = join(process.cwd(), "public", "bg-cache");
+    const root = workDir("bg-cache");
     if (!existsSync(root)) return;
     const cutoff = Date.now() - 30 * 60 * 1000;
     for (const entry of readdirSync(root)) {
@@ -189,7 +189,7 @@ function styleToImageHint(style?: string): string {
 
 /** best available background for the visual prompt; returns path + source label */
 async function makeBackground(visualPrompt: string, style: string | undefined): Promise<{ path: string; source: string }> {
-  const setDir = join(process.cwd(), "public", "bg-cache", `bg-${Date.now()}`);
+  const setDir = workDir("bg-cache", `bg-${Date.now()}`);
   const prompt =
     `Illustration: ${visualPrompt}. ` +
     `${styleToImageHint(style)}. ` +
@@ -199,8 +199,20 @@ async function makeBackground(visualPrompt: string, style: string | undefined): 
   const ai = await generateAiImage(prompt, setDir);
   if (ai) return ai;
 
-  const proc = await makeScene(setDir);
-  return { path: proc, source: "procedural" };
+  try {
+    const proc = await makeScene(setDir);
+    return { path: proc, source: "procedural" };
+  } catch {
+    const gradPath = join(setDir, "gradient.png");
+    await runProc(
+      FFMPEG,
+      ["-y", "-f", "lavfi",
+       "-i", "gradients=s=1080x1920:c0=0x141432:c1=0x5a2ab8:type=linear:d=1",
+       "-frames:v", "1", "-update", "1", gradPath],
+      60000
+    );
+    return { path: gradPath, source: "gradient" };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -246,7 +258,7 @@ export async function POST(req: NextRequest) {
 
     // compose 1080x1920 image
     const outId = `meme-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const outPath = join(process.cwd(), "public", "generated", `${outId}.jpg`);
+    const outPath = workDir("generated", `${outId}.jpg`);
     const phase = Math.random() * Math.PI;
 
     let chain =
@@ -276,7 +288,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       status: "ready",
-      url: `/generated/${outId}.jpg`,
+      url: `/api/output/${outId}.jpg`,
       quote,
       kicker,
       category,

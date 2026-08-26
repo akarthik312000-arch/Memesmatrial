@@ -117,7 +117,13 @@ This project should be deployed to **Netlify**, not GitHub Pages. The app uses N
 6. The API tries configured OmniRoute, NVIDIA, then OpenRouter and automatically continues after provider errors or timeouts.
 7. For Netlify, set `OMNIROUTE_BASE_URL` to a reachable hosted OmniRoute URL; `localhost` only works during local development.
 
-Netlify will install the Next.js adapter and deploy the API route as a Node function. Video generation can take several minutes, so the site requires a Netlify plan that supports the configured function timeout.
+Netlify will install the Next.js adapter (`@netlify/plugin-nextjs`) and deploy the API routes as Node functions on Node 22. The `netlify.toml` bundles the `ffmpeg-static` binary and the bundled fonts into the functions automatically.
+
+Generated memes/videos are written to the function's temp directory (the only writable location on Netlify) and served through `/api/output/<file>`; artifacts are cleaned up after 30 minutes.
+
+Narration TTS: locally on Windows it uses built-in System.Speech. On Netlify, configure a hosted OpenAI-compatible TTS provider via `TTS_BASE_URL` + `TTS_KEY` (see `.env.example`). Without one, videos render with a silent narration track.
+
+Function timeouts are configured to 100 seconds in `netlify.toml`. Video generation can take several minutes; if a generation exceeds the limit, consider a Netlify plan or configuration that supports extended timeouts.
 
 ### API Configuration
 

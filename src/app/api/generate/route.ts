@@ -16,16 +16,13 @@ import ffmpegPath from "ffmpeg-static";
 import { existsSync as fileExists } from "fs";
 import type { VideoCreationForm, Scene } from "@/lib/types";
 import { generateAiImage } from "@/lib/ai-image";
+import { workDir, fontFile } from "@/lib/runtime";
 
 export const runtime = "nodejs";
-export const maxDuration = 600;
 
-const FONT = "C\\:/Windows/Fonts/impact.ttf";
-const FONT_AR = "C\\:/Windows/Fonts/arialbd.ttf";
-// aesthetic mood-reel fonts (downloaded, OFL licensed)
-const FONT_DISPLAY = "D\\:/job/memesmaterial-studio/assets/fonts/bebas.ttf";
-const FONT_SERIF_I = "D\\:/job/memesmaterial-studio/assets/fonts/ptserif-italic.ttf";
-const FONT_SCRIPT = "D\\:/job/memesmaterial-studio/assets/fonts/greatvibes.ttf";
+const FONT_DISPLAY = fontFile("bebas.ttf");
+const FONT_SERIF_I = fontFile("ptserif-italic.ttf");
+const FONT_SCRIPT = fontFile("greatvibes.ttf");
 const SCENE_SEC = 6; // snappier meme pacing
 const TOTAL_SEC = 25; // default output duration; per-scene = total / scene count
 const ALLOWED_TOTALS = [25, 60] as const;
@@ -430,7 +427,40 @@ function escDraw(t: string): string {
   return t.replace(/\\/g, "\\\\").replace(/'/g, "\u2019").replace(/:/g, "\\:");
 }
 
-async function tts(text: string, outWav: string): Promise<void> {
+async function hostedTts(text: string, outWav: string): Promise<boolean> {
+  const key = process.env.TTS_KEY;
+  const base = process.env.TTS_BASE_URL;
+  if (!key || key.startsWith("your_") || !base) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await fetch(`${base.replace(/\/$/, "")}/audio/speech`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.TTS_MODEL || "tts-1",
+        voice: process.env.TTS_VOICE || "alloy",
+        input: text,
+        response_format: "wav",
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return false;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length < 1000) return false;
+    writeFileSync(outWav, buf);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function windowsTts(text: string, outWav: string): Promise<void> {
   const safe = text.replace(/'/g, "''");
   const ps =
     "Add-Type -AssemblyName System.Speech; " +
@@ -438,8 +468,29 @@ async function tts(text: string, outWav: string): Promise<void> {
     "$s.Rate = 2; $s.SetOutputToWaveFile('" +
     outWav.replace(/\\/g, "\\\\") + "'); " +
     "$s.Speak('" + safe + "'); $s.Dispose()";
-  await runProc("powershell.exe", ["-NoProfile", "-Command", ps], 30000);
-  if (!existsSync(outWav)) throw new Error("TTS failed");
+  return runProc("powershell.exe", ["-NoProfile", "-Command", ps], 30000);
+}
+
+/** silent placeholder track so rendering still succeeds when TTS is unavailable */
+async function silentTrack(outWav: string): Promise<void> {
+  await runProc(
+    FFMPEG,
+    ["-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", "1", outWav],
+    30000
+  );
+}
+
+async function tts(text: string, outWav: string): Promise<void> {
+  if (await hostedTts(text, outWav)) return;
+  if (process.platform === "win32") {
+    try {
+      await windowsTts(text, outWav);
+      if (existsSync(outWav)) return;
+    } catch {
+      // fall through to silence
+    }
+  }
+  await silentTrack(outWav);
 }
 
 /**
@@ -529,7 +580,7 @@ async function renderVideo(
     wav
   );
   // per-scene AI illustrations matched to the script; procedural fallback
-  const bgRoot = join(process.cwd(), "public", "bg-cache");
+  const bgRoot = workDir("bg-cache");
   cleanupSceneSets(bgRoot);
   const setDir = join(bgRoot, `set-${Date.now()}`);
   const { paths: bgs, source: bgSource } = await generateAiSceneSet(setDir, scenes, form, character);
@@ -669,7 +720,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const tmpDir = join(process.cwd(), "generated-videos", `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+  const tmpDir = workDir("tmp", `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
   const totalSec = (ALLOWED_TOTALS as readonly number[]).includes(form.durationSec ?? TOTAL_SEC)
     ? form.durationSec ?? TOTAL_SEC
     : TOTAL_SEC;
@@ -693,7 +744,7 @@ export async function POST(req: NextRequest) {
     const scenes = aiScenes && aiScenes.length >= 3 ? aiScenes : buildScenes(concept);
 
     const id = crypto.randomUUID().slice(0, 8);
-    const outDir = join(process.cwd(), "public", "generated");
+    const outDir = workDir("generated");
     mkdirSync(outDir, { recursive: true });
     mkdirSync(tmpDir, { recursive: true });
 
@@ -720,7 +771,7 @@ export async function POST(req: NextRequest) {
       title: `${form.style} Meme: ${form.topic}`,
       scenes,
       mp4Path: publicPath,
-      url: `/generated/${finalName}`,
+      url: `/api/output/${finalName}`,
       duration: totalSec,
       status: "ready",
       createdAt: new Date().toISOString(),

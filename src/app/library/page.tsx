@@ -63,7 +63,7 @@ export default function VideoLibrary() {
 
         <select
           value={filter}
-          onChange={(e) => setFilter(e.target.value as any)}
+          onChange={(e) => setFilter(e.target.value as "all" | "ready" | "processing" | "error")}
           className="w-full bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-blue-500 mt-2"
         >
           <option value="all">Show All</option>

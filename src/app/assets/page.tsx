@@ -33,7 +33,7 @@ export default function Assets() {
         <h2 className="text-xl font-medium mb-4">Copyright Safety</h2>
         <p className="text-gray-400">
           All assets are AI-generated or copyright-safe. No unauthorized movie clips,
-          TV footage, or other creators' content is used.
+          TV footage, or other creators&apos; content is used.
         </p>
       </div>
     </div>
