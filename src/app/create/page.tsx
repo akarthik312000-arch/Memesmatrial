@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   VideoCreationForm,
   CHANNEL_CATEGORIES,
@@ -25,6 +25,7 @@ interface Result {
   url: string;
   status: string;
   duration: number;
+  scenes?: Array<{ id?: string; voiceOver?: string; subtitles?: string }>;
   youtube: {
     title: string;
     description: string;
@@ -32,6 +33,30 @@ interface Result {
     thumbnailText: string;
     pinnedComment: string;
   };
+}
+
+function timestamp(sec: number, comma: boolean): string {
+  const h = String(Math.floor(sec / 3600)).padStart(2, "0");
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
+  const s = String(Math.floor(sec % 60)).padStart(2, "0");
+  const ms = String(Math.round((sec % 1) * 1000)).padStart(3, "0");
+  return `${h}:${m}:${s}${comma ? "," : "."}${ms}`;
+}
+
+function subtitlesText(result: Result, ext: "srt" | "vtt"): string {
+  const scenes = result.scenes ?? [];
+  const per = scenes.length ? result.duration / scenes.length : result.duration;
+  let srt = "";
+  let vtt = "WEBVTT\n\n";
+  scenes.forEach((sc, i) => {
+    const text = (sc.subtitles || sc.voiceOver || "").trim();
+    if (!text) return;
+    const start = i * per;
+    const end = Math.min((i + 1) * per, result.duration);
+    if (ext === "srt") srt += `${i + 1}\n${timestamp(start, true)} --> ${timestamp(end, true)}\n${text}\n\n`;
+    else vtt += `${timestamp(start, false)} --> ${timestamp(end, false)}\n${text}\n\n`;
+  });
+  return ext === "srt" ? srt : vtt;
 }
 
 export default function CreatePage() {
@@ -43,7 +68,9 @@ export default function CreatePage() {
   });
   const [busy, setBusy] = useState(false);
   const [ghost, setGhost] = useState(false);
+  const [music, setMusic] = useState(false);
   const [step, setStep] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
 
@@ -52,25 +79,40 @@ export default function CreatePage() {
     setBusy(true);
     setError(null);
     setResult(null);
-    const timer = setInterval(
-      () => setStep((s) => (s < STEPS.length - 2 ? s + 1 : s)),
-      ghost ? 800 : 2500
-    );
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, fast: ghost }),
+        body: JSON.stringify({ ...form, fast: ghost, music, async: true }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Generation failed");
-      setStep(STEPS.length - 1);
-      setResult(data);
+      if (!res.ok || !data.jobId) throw new Error(data.error || "Could not start generation");
+
+      const started = Date.now();
+      const maxMs = 15 * 60 * 1000;
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const jRes = await fetch(`/api/jobs/${data.jobId}`);
+        const job = await jRes.json();
+        if (job.status === "completed") {
+          setStep(STEPS.length - 1);
+          setResult(job.result as Result);
+          break;
+        }
+        if (job.status === "failed") {
+          throw new Error(job.error || "Generation failed");
+        }
+        // reflect pipeline progress from the job
+        for (let i = 0; i < STEPS.length - 1; i++) {
+          if (job.progress?.includes(STEPS[i])) setStep(i);
+        }
+        if (Date.now() - started > maxMs) throw new Error("Generation timed out after 15 minutes");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Generation failed");
       setStep(0);
     } finally {
-      clearInterval(timer);
+      if (timerRef.current) clearInterval(timerRef.current);
       setBusy(false);
     }
   };
@@ -144,6 +186,16 @@ export default function CreatePage() {
           👻 GHOST MODE (10x) — skip AI scene images, render with instant gradient scenes
         </label>
 
+        <label className="flex cursor-pointer items-center gap-3 text-sm text-gray-300">
+          <input
+            type="checkbox"
+            checked={music}
+            onChange={(e) => setMusic(e.target.checked)}
+            className="h-4 w-4 accent-[#ff625e]"
+          />
+          Add background music bed (mixed under narration)
+        </label>
+
         <button
           type="submit"
           disabled={busy}
@@ -181,11 +233,29 @@ export default function CreatePage() {
             <video src={result.url} controls width={480} className="rounded" />
             <a
               href={result.url}
-              download
+              download={`memesmaterial-${result.url?.split("/").pop() ?? "video.mp4"}`}
               className="mt-4 inline-block px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 transition-colors"
             >
               ⬇ Download MP4
             </a>
+            {result.scenes && result.scenes.length > 0 && (
+              <>
+                <a
+                  href={`data:text/plain;charset=utf-8,${encodeURIComponent(subtitlesText(result, "srt"))}`}
+                  download={`${result.title.replace(/[^\w]+/g, "-").toLowerCase()}.srt`}
+                  className="mt-4 ml-2 inline-block px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
+                >
+                  ⬇ Subtitles .SRT
+                </a>
+                <a
+                  href={`data:text/vtt;charset=utf-8,${encodeURIComponent(subtitlesText(result, "vtt"))}`}
+                  download={`${result.title.replace(/[^\w]+/g, "-").toLowerCase()}.vtt`}
+                  className="mt-4 ml-2 inline-block px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-500 transition-colors"
+                >
+                  ⬇ Subtitles .VTT
+                </a>
+              </>
+            )}
           </div>
           <div className="p-6 bg-gray-800 rounded border border-gray-600">
             <h3 className="font-bold mb-2">YouTube Publishing Package</h3>

@@ -6,6 +6,7 @@ import ffmpegPath from "ffmpeg-static";
 import { existsSync as fileExists } from "fs";
 import { generateAiImage } from "@/lib/ai-image";
 import { workDir, fontFile, sanitizeError } from "@/lib/runtime";
+import { addLibraryItem } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,6 @@ function resolveFfmpeg(): string {
   throw new Error("FFmpeg binary not found");
 }
 const FFMPEG = resolveFfmpeg();
-const FONT_DISPLAY = fontFile("bebas.ttf");
 const FONT_SERIF_I = fontFile("ptserif-italic.ttf");
 const FONT_SCRIPT = fontFile("greatvibes.ttf");
 
@@ -265,6 +265,13 @@ export async function POST(req: NextRequest) {
     const position = ["top", "middle", "bottom"].includes(body.textPosition)
       ? String(body.textPosition)
       : "middle";
+    const FONTS: Record<string, string> = {
+      bebas: "bebas.ttf",
+      anton: "anton.ttf",
+      ptserif: "ptserif-bold.ttf",
+      cormorant: "cormorant-bold.ttf",
+    };
+    const displayFont = fontFile(FONTS[body.font] ?? FONTS.bebas);
 
     // user-provided image: use it as the background exactly as-is
     const uploaded =
@@ -332,7 +339,7 @@ export async function POST(req: NextRequest) {
       const clsLine = Math.round(140 * fontScale);
       top.forEach((line, li) => {
         chain +=
-          `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
+          `,drawtext=fontfile='${displayFont}':text='${escDraw(line)}'` +
           `:fontcolor=white:borderw=7:bordercolor=black` +
           `:fontsize=${clsSize}:x=(w-text_w)/2:y='${Math.round(H * 0.04) + li * clsLine}'`;
       });
@@ -340,7 +347,7 @@ export async function POST(req: NextRequest) {
         const startY = Math.round(H * 0.95) - bottom.length * clsLine;
         bottom.forEach((line, li) => {
           chain +=
-            `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
+          `,drawtext=fontfile='${displayFont}':text='${escDraw(line)}'` +
             `:fontcolor=white:borderw=7:bordercolor=black` +
             `:fontsize=${clsSize}:x=(w-text_w)/2:y='${startY + li * clsLine}'`;
         });
@@ -357,7 +364,7 @@ export async function POST(req: NextRequest) {
       }
       wrapText(quote, Math.round(20 / fontScale), 4).forEach((line, li) => {
         chain +=
-          `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
+          `,drawtext=fontfile='${displayFont}':text='${escDraw(line)}'` +
           `:fontcolor=white:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=${quoteSize}` +
           `:x='(w-text_w)/2':y='${posTop + li * quoteLine}+${phase.toFixed(2)}*0'`;
       });
@@ -372,8 +379,8 @@ export async function POST(req: NextRequest) {
       90000
     );
 
-    return NextResponse.json({
-      status: "ready",
+    const payload = {
+      status: "ready" as const,
       url: `/api/output/${outId}.jpg`,
       quote,
       kicker,
@@ -387,9 +394,23 @@ export async function POST(req: NextRequest) {
       fontSize: fontScale,
       textPosition: position,
       watermark: showWatermark,
+      font: body.font ?? "bebas",
       backgroundSource: bg.source,
       createdAt: new Date().toISOString(),
+    };
+    addLibraryItem({
+      id: outId,
+      kind: "image",
+      url: `/api/output/${outId}.jpg`,
+      title: quote,
+      topic: text,
+      category,
+      style,
+      backgroundSource: bg.source,
+      aiSource: bg.source === "upload" ? "upload" : "ai",
+      createdAt: new Date().toISOString(),
     });
+    return NextResponse.json(payload);
   } catch (e) {
     return NextResponse.json(
       {

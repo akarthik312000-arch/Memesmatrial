@@ -15,6 +15,8 @@ export interface VideoCreationForm {
   durationSec?: 25 | 60;
   /** Ghost Mode (10x): skip AI scene images, render with instant gradient scenes */
   fast?: boolean;
+  /** mix a low-volume synthesized music bed under the narration */
+  music?: boolean;
 }
 
 export interface Scene {

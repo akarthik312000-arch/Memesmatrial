@@ -49,6 +49,14 @@ export const Sidebar = () => {
             </li>
             <li>
               <a
+                href="/editor"
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#a9a4b7] transition-colors hover:bg-white/5 hover:text-white"
+              >
+                Video Editor
+              </a>
+            </li>
+            <li>
+              <a
                 href="/templates"
                 className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#a9a4b7] transition-colors hover:bg-white/5 hover:text-white"
               >
@@ -61,6 +69,14 @@ export const Sidebar = () => {
                 className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#a9a4b7] transition-colors hover:bg-white/5 hover:text-white"
               >
                 Assets
+              </a>
+            </li>
+            <li>
+              <a
+                href="/analytics"
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#a9a4b7] transition-colors hover:bg-white/5 hover:text-white"
+              >
+                Analytics
               </a>
             </li>
             <li>

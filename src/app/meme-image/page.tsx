@@ -54,6 +54,7 @@ export default function MemeImagePage() {
   const [fontSize, setFontSize] = useState(1);
   const [textPosition, setTextPosition] = useState<"top" | "middle" | "bottom">("middle");
   const [watermark, setWatermark] = useState(true);
+  const [font, setFont] = useState("bebas");
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -102,7 +103,7 @@ export default function MemeImagePage() {
           ai: useAi && !imageData,
           image: imageData ?? undefined,
           exact: imageData !== null,
-          ...(godMode ? { fontSize, textPosition, watermark } : {}),
+          ...(godMode ? { fontSize, textPosition, watermark, font } : {}),
         }),
       });
       const data = await res.json();
@@ -245,6 +246,17 @@ export default function MemeImagePage() {
                     onChange={(e) => setFontSize(Number(e.target.value))}
                     className="w-full accent-amber-400"
                   />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-300">
+                    Font
+                  </label>
+                  <select value={font} onChange={(e) => setFont(e.target.value)} className={selectCls}>
+                    <option value="bebas">Bebas (condensed display)</option>
+                    <option value="anton">Anton (heavy display)</option>
+                    <option value="ptserif">PT Serif Bold</option>
+                    <option value="cormorant">Cormorant Bold</option>
+                  </select>
                 </div>
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-300">
