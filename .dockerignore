@@ -1,0 +1,11 @@
+node_modules
+.next
+.netlify
+.git
+.env
+.env.*
+*.log
+tsconfig.tsbuildinfo
+generated-videos
+public/bg-cache
+public/generated
