@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     durationSec: body.durationSec,
     fast: body.fast === true,
     music: body.music === true,
+    sfx: body.sfx === true,
   };
 
   try {
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
       }
       video.validation = qc.meta;
 
-      addLibraryItem({
+      await addLibraryItem({
         id: String(video.id),
         kind: "video",
         url: String(video.url),

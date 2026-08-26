@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type { VideoCreationForm } from "@/lib/types";
 import { runVideoPipeline } from "@/lib/video-pipeline";
 import { startVideoJob, listJobs } from "@/lib/jobs";
@@ -24,6 +24,7 @@ export async function POST(req: NextRequest) {
     durationSec: body.durationSec,
     fast: body.fast === true,
     music: body.music === true,
+    sfx: body.sfx === true,
   };
   if (!form.topic || !form.category || !form.language || !form.style) {
     return NextResponse.json(
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const video = await runVideoPipeline(form);
-    addLibraryItem({
+    await addLibraryItem({
       id: String(video.id),
       kind: "video",
       url: String(video.url),
@@ -70,7 +71,7 @@ async function runPipelineJob(
   onProgress?: (stage: string) => void
 ): Promise<Record<string, unknown>> {
   const video = await runVideoPipeline(form, { onProgress });
-  addLibraryItem({
+  await addLibraryItem({
     id: String(video.id),
     kind: "video",
     url: String(video.url),

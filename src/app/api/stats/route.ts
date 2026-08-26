@@ -4,5 +4,6 @@ import { libraryStats } from "@/lib/store";
 export const runtime = "nodejs";
 
 export async function GET() {
-  return NextResponse.json({ ok: true, ...libraryStats() });
+  const stats = await libraryStats();
+  return NextResponse.json({ ok: true, ...stats });
 }

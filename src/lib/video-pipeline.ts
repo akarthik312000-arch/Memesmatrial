@@ -658,11 +658,28 @@ async function renderVideo(
   });
   args.push("-i", wav);
 
-  // optional low-volume synthesized music bed, mixed under the narration
-  let audioMap = "[adry]";
+  // optional audio layers: synthesized music bed + whoosh stings at scene boundaries
+  const layerChains: string[] = [];
   if (form.music) {
     args.push("-f", "lavfi", "-t", String(total), "-i", "sine=frequency=110:sample_rate=44100");
-    filterComplex += `;[${n + 1}:a]volume=0.10[amusic];[adry][amusic]amix=inputs=2:duration=first:normalize=0[aout]`;
+    layerChains.push("volume=0.10");
+  }
+  if (form.sfx) {
+    const perMs = Math.round((total / n) * 1000);
+    for (let b = 1; b < n; b++) {
+      args.push("-f", "lavfi", "-t", "0.3", "-i", "anoisesrc=color=brown:sample_rate=44100:amplitude=0.9");
+      const delay = b * perMs;
+      layerChains.push(`lowpass=f=900,volume=0.25,afade=t=out:st=0:d=0.3,adelay=${delay}|${delay}`);
+    }
+  }
+  let audioMap = "[adry]";
+  if (layerChains.length) {
+    const mixed: string[] = ["[adry]"];
+    layerChains.forEach((chain, k) => {
+      filterComplex += `;[${n + 1 + k}:a]${chain}[al${k}]`;
+      mixed.push(`[al${k}]`);
+    });
+    filterComplex += `;${mixed.join("")}amix=inputs=${mixed.length}:duration=first:normalize=0[aout]`;
     audioMap = "[aout]";
   }
 

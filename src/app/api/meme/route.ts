@@ -398,7 +398,7 @@ export async function POST(req: NextRequest) {
       backgroundSource: bg.source,
       createdAt: new Date().toISOString(),
     };
-    addLibraryItem({
+    await addLibraryItem({
       id: outId,
       kind: "image",
       url: `/api/output/${outId}.jpg`,

@@ -1,8 +1,17 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { VideoCreationForm, CHANNEL_CATEGORIES, VALID_LANGUAGES, VALID_STYLES } from "@/lib/types";
 
 export default function Home() {
+  const [stats, setStats] = useState<{ totalImages: number; totalVideos: number; thisWeek: number } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/stats")
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => {});
+  }, []);
+
   const [form, setForm] = useState<VideoCreationForm>({
     topic: "",
     category: "Everyday Life",
@@ -42,6 +51,8 @@ export default function Home() {
           <p className="mt-4 max-w-lg text-base leading-7 text-[#a9a4b7]">A complete 25 or 60-second meme video, from one loose idea to a finished MP4.</p>
         </div>
         <div className="flex gap-3 text-xs font-bold text-[#a9a4b7]">
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">{stats ? stats.totalImages : "—"}</span>memes created</div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">{stats ? stats.totalVideos : "—"}</span>videos rendered</div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">25s / 60s</span>pick a format</div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"><span className="block text-xl text-white">1080p</span>export ready</div>
         </div>

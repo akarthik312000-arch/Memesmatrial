@@ -17,6 +17,8 @@ export interface VideoCreationForm {
   fast?: boolean;
   /** mix a low-volume synthesized music bed under the narration */
   music?: boolean;
+  /** add synthesized whoosh stings at scene boundaries */
+  sfx?: boolean;
 }
 
 export interface Scene {

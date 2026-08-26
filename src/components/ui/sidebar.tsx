@@ -65,6 +65,14 @@ export const Sidebar = () => {
             </li>
             <li>
               <a
+                href="/projects"
+                className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#a9a4b7] transition-colors hover:bg-white/5 hover:text-white"
+              >
+                Projects
+              </a>
+            </li>
+            <li>
+              <a
                 href="/assets"
                 className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[#a9a4b7] transition-colors hover:bg-white/5 hover:text-white"
               >
