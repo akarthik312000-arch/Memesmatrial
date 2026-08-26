@@ -1,0 +1,66 @@
+import { NextResponse } from "next/server";
+import { spawnSync } from "child_process";
+import ffmpegPath from "ffmpeg-static";
+import { existsSync } from "fs";
+import { join } from "path";
+
+export const runtime = "nodejs";
+
+type Status = "connected" | "missing" | "keyless";
+
+function keyStatus(value: string | undefined): Status {
+  if (value && !value.startsWith("your_") && value !== "local") return "connected";
+  return "missing";
+}
+
+function resolveFfmpeg(): string | null {
+  if (ffmpegPath && existsSync(ffmpegPath)) return ffmpegPath;
+  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+  const local = join(process.cwd(), "node_modules", "ffmpeg-static", binaryName);
+  if (existsSync(local)) return local;
+  const onPath = spawnSync(binaryName === "ffmpeg.exe" ? "ffmpeg" : binaryName, ["-version"], { windowsHide: true });
+  return onPath.status === 0 ? binaryName : null;
+}
+
+function ffmpegInfo(): { found: boolean; version: string | null; source: string } {
+  const bin = resolveFfmpeg();
+  if (!bin) return { found: false, version: null, source: "none" };
+  const res = spawnSync(bin, ["-version"], { windowsHide: true, encoding: "utf8" });
+  const first = res.stdout?.split("\n")[0]?.trim() ?? null;
+  const version = first ? (first.match(/ffmpeg version (\S+)/)?.[1] ?? first.slice(0, 60)) : null;
+  const bundled = bin.includes("ffmpeg-static");
+  return { found: res.status === 0 || Boolean(version), version, source: bundled ? "bundled (ffmpeg-static)" : "system PATH" };
+}
+
+export async function GET() {
+  const ff = ffmpegInfo();
+  const ttsKey = keyStatus(process.env.TTS_KEY);
+  const ttsHosted = ttsKey === "connected" && Boolean(process.env.TTS_BASE_URL);
+
+  return NextResponse.json({
+    ok: true,
+    node: process.version,
+    platform: process.platform,
+    ffmpeg: ff,
+    providers: {
+      text: {
+        omniroute: keyStatus(process.env.OMNIROUTE_API_KEY),
+        nvidia: keyStatus(process.env.NVIDIA_API_KEY),
+        openrouter: keyStatus(process.env.OPENROUTER_API_KEY),
+      },
+      image: {
+        imageProvider:
+          keyStatus(process.env.IMAGE_GEN_KEY) === "connected" && process.env.IMAGE_GEN_BASE_URL
+            ? "connected"
+            : "missing",
+        openrouterImage: keyStatus(process.env.OPENROUTER_API_KEY),
+        pollinations: "keyless",
+      },
+      tts: {
+        hosted: ttsHosted ? "connected" : "missing",
+        windowsSpeech: process.platform === "win32" ? "available" : "unavailable",
+      },
+      musicSfx: keyStatus(process.env.MUSIC_SFX_KEY),
+    },
+  });
+}

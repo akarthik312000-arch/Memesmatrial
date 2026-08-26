@@ -37,6 +37,7 @@ type MemeResult = {
   style?: string;
   language?: string;
   layout?: "center" | "classic";
+  aspect?: string;
   backgroundSource?: string;
   error?: string;
 };
@@ -48,6 +49,7 @@ export default function MemeImagePage() {
   const [language, setLanguage] = useState(LANGUAGES[0]);
   const [useAi, setUseAi] = useState(true);
   const [layout, setLayout] = useState<"center" | "classic">("center");
+  const [aspect, setAspect] = useState("9:16");
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -92,6 +94,7 @@ export default function MemeImagePage() {
           style,
           language,
           layout,
+          aspect,
           ai: useAi && !imageData,
           image: imageData ?? undefined,
           exact: imageData !== null,
@@ -198,6 +201,17 @@ export default function MemeImagePage() {
               >
                 <option value="center">Centered poster (floating quote)</option>
                 <option value="classic">Classic meme (top &amp; bottom text)</option>
+              </select>
+            </div>
+
+            <div className="mt-4">
+              <label htmlFor="meme-aspect" className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-300">
+                Aspect ratio
+              </label>
+              <select id="meme-aspect" value={aspect} onChange={(e) => setAspect(e.target.value)} className={selectCls}>
+                <option value="9:16">9:16 — Story / Shorts (1080×1920)</option>
+                <option value="4:5">4:5 — Feed post (1080×1350)</option>
+                <option value="1:1">1:1 — Square (1080×1080)</option>
               </select>
             </div>
 

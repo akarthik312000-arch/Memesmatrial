@@ -14,7 +14,7 @@ async function openRouterImage(prompt: string, dir: string): Promise<string | nu
 
   for (const model of models) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
+    const timer = setTimeout(() => controller.abort(), 45000);
     try {
       const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -53,7 +53,7 @@ async function imageGenProviderImage(prompt: string, dir: string): Promise<strin
   if (!base) return null;
   const model = process.env.IMAGE_GEN_MODEL || "gemini-2.5-flash-image";
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120000);
+  const timer = setTimeout(() => controller.abort(), 45000);
   try {
     const res = await fetch(`${base.replace(/\/$/, "")}/images/generations`, {
       method: "POST",
@@ -78,7 +78,7 @@ async function imageGenProviderImage(prompt: string, dir: string): Promise<strin
 /** keyless free fallback: Pollinations.ai text-to-image */
 async function pollinationsImage(prompt: string, dir: string): Promise<string | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120000);
+  const timer = setTimeout(() => controller.abort(), 45000);
   try {
     // keep it short and subject-first - long prompts dilute adherence
     const short = prompt.split(".").slice(0, 2).join(",").slice(0, 220);

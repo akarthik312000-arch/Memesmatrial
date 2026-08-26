@@ -5,7 +5,7 @@ import { join } from "path";
 import ffmpegPath from "ffmpeg-static";
 import { existsSync as fileExists } from "fs";
 import { generateAiImage } from "@/lib/ai-image";
-import { workDir, fontFile } from "@/lib/runtime";
+import { workDir, fontFile, sanitizeError } from "@/lib/runtime";
 
 export const runtime = "nodejs";
 
@@ -64,17 +64,20 @@ async function makeScene(dir: string): Promise<string> {
 
 /** delete background temp sets older than 30 minutes */
 function cleanupOldSets() {
-  try {
-    const root = workDir("bg-cache");
-    if (!existsSync(root)) return;
-    const cutoff = Date.now() - 30 * 60 * 1000;
-    for (const entry of readdirSync(root)) {
-      const ts = Number(entry.split("-").pop());
-      if (Number.isFinite(ts) && ts < cutoff) rmSync(join(root, entry), { recursive: true, force: true });
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  const clean = (root: string) => {
+    try {
+      if (!existsSync(root)) return;
+      for (const entry of readdirSync(root)) {
+        const ts = Number(entry.split("-").pop());
+        if (Number.isFinite(ts) && ts < cutoff) rmSync(join(root, entry), { recursive: true, force: true });
+      }
+    } catch {
+      // best effort
     }
-  } catch {
-    // best effort
-  }
+  };
+  clean(workDir("bg-cache"));
+  clean(workDir("uploads"));
 }
 
 /** recent captions so repeated generations stay different (in-memory) */
@@ -239,6 +242,13 @@ export async function POST(req: NextRequest) {
     const style = String(body.style ?? "Meme").slice(0, 30);
     const language = String(body.language ?? "English").slice(0, 20);
     const layout = body.layout === "classic" ? "classic" : "center";
+    const ASPECTS: Record<string, [number, number]> = {
+      "1:1": [1080, 1080],
+      "4:5": [1080, 1350],
+      "9:16": [1080, 1920],
+    };
+    const aspect = ASPECTS[body.aspect] ? String(body.aspect) : "9:16";
+    const [W, H] = ASPECTS[aspect];
 
     // user-provided image: use it as the background exactly as-is
     const uploaded =
@@ -287,10 +297,10 @@ export async function POST(req: NextRequest) {
     const phase = Math.random() * Math.PI;
 
     let chain =
-      `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920`;
+      `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
     const watermark =
       `,drawtext=fontfile='${FONT_SCRIPT}':text='MemesMaterial'` +
-      `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=58:x=52:y=1790`;
+      `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=58:x=52:y=${H - 130}`;
 
     if (layout === "classic") {
       // classic meme layout: uppercase text pinned to top and bottom with thick border
@@ -302,10 +312,10 @@ export async function POST(req: NextRequest) {
         chain +=
           `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
           `:fontcolor=white:borderw=7:bordercolor=black` +
-          `:fontsize=118:x=(w-text_w)/2:y='${70 + li * 140}'`;
+          `:fontsize=118:x=(w-text_w)/2:y='${Math.round(H * 0.04) + li * 140}'`;
       });
       if (bottom.length) {
-        const startY = 1830 - bottom.length * 140;
+        const startY = Math.round(H * 0.95) - bottom.length * 140;
         bottom.forEach((line, li) => {
           chain +=
             `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
@@ -320,13 +330,13 @@ export async function POST(req: NextRequest) {
         chain +=
           `,drawtext=fontfile='${FONT_SERIF_I}':text='${escDraw(kicker.toUpperCase().split("").join(" "))}'` +
           `:fontcolor=white@0.92:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=36` +
-          `:x='(w-text_w)/2':y='560'`;
+          `:x='(w-text_w)/2':y='${Math.round(H * 0.29)}'`;
       }
       wrapText(quote, 20, 4).forEach((line, li) => {
         chain +=
           `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
           `:fontcolor=white:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=124` +
-          `:x='(w-text_w)/2':y='${640 + li * 145}+${phase.toFixed(2)}*0'`;
+          `:x='(w-text_w)/2':y='${Math.round(H * 0.33) + li * 145}+${phase.toFixed(2)}*0'`;
       });
       chain += watermark;
     }
@@ -348,12 +358,19 @@ export async function POST(req: NextRequest) {
       style,
       language,
       layout,
+      aspect,
+      width: W,
+      height: H,
       backgroundSource: bg.source,
       createdAt: new Date().toISOString(),
     });
   } catch (e) {
     return NextResponse.json(
-      { status: "error", error: e instanceof Error ? e.message : "generation failed" },
+      {
+        status: "error",
+        error: e instanceof Error ? sanitizeError(e.message) : "generation failed",
+        hint: "Check /api/health for provider status, or retry — image providers fall back automatically.",
+      },
       { status: 500 }
     );
   }

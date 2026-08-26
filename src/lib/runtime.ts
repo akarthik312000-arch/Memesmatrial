@@ -16,3 +16,13 @@ export function fontFile(name: string): string {
   if (!existsSync(p)) throw new Error(`Font not found: ${name}`);
   return escapeDrawtextPath(p);
 }
+
+/** strip machine-specific paths/noise so clients get safe, readable errors */
+export function sanitizeError(msg: string): string {
+  const clean = msg
+    .replace(/[A-Za-z]:\\[^\s"',:]*/g, "<path>")
+    .replace(/(?:\/tmp|\/var\/task)[^\s"',:]*/g, "<path>")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.slice(-400);
+}

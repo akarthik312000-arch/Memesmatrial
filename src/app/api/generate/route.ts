@@ -16,7 +16,7 @@ import ffmpegPath from "ffmpeg-static";
 import { existsSync as fileExists } from "fs";
 import type { VideoCreationForm, Scene } from "@/lib/types";
 import { generateAiImage } from "@/lib/ai-image";
-import { workDir, fontFile } from "@/lib/runtime";
+import { workDir, fontFile, sanitizeError } from "@/lib/runtime";
 
 export const runtime = "nodejs";
 
@@ -399,10 +399,14 @@ async function generateAiSceneSet(
   );
   const paths = results.map((r) => (r.status === "fulfilled" ? r.value?.path ?? null : null));
 
-  // sequential retry for failed scenes (parallel bursts often hit rate limits)
-  for (let i = 0; i < paths.length; i++) {
+  // bounded sequential retry for failed scenes (parallel bursts often hit rate limits);
+  // capped so worst-case latency stays acceptable — remaining gaps fall to procedural
+  const retryLimit = Math.min(2, paths.filter((p) => !p).length);
+  let retried = 0;
+  for (let i = 0; i < paths.length && retried < retryLimit; i++) {
     if (paths[i]) continue;
     const retry = await generateAiImage(prompts[i], join(dir, `ai-${scenes[i].id}-retry`));
+    retried++;
     if (retry) paths[i] = retry.path;
   }
 
@@ -667,6 +671,40 @@ function validate(p: string): { valid: boolean; error?: string } {
   }
 }
 
+/** read duration + resolution from ffmpeg's stream info (exit code is ignored) */
+function probeMedia(p: string): Promise<{ duration?: number; width?: number; height?: number }> {
+  return new Promise((resolve) => {
+    let info = "";
+    const proc = spawn(FFMPEG, ["-hide_banner", "-i", p], { windowsHide: true });
+    proc.stderr?.on("data", (d: Buffer) => {
+      if (info.length < 8000) info += d.toString();
+    });
+    proc.on("error", () => resolve({}));
+    proc.on("close", () => {
+      const dur = info.match(/Duration:\s*(\d+):(\d+):(\d+\.\d+)/);
+      const dim = info.match(/,\s(\d{3,5})x(\d{3,5})[\s,]/);
+      resolve({
+        duration: dur ? Number(dur[1]) * 3600 + Number(dur[2]) * 60 + Number(dur[3]) : undefined,
+        width: dim ? Number(dim[1]) : undefined,
+        height: dim ? Number(dim[2]) : undefined,
+      });
+    });
+  });
+}
+
+async function validateOutput(p: string, expectedSec: number): Promise<{ valid: boolean; error?: string; meta: Record<string, unknown> }> {
+  const base = validate(p);
+  if (!base.valid) return { ...base, meta: {} };
+  const meta = await probeMedia(p);
+  if (meta.duration !== undefined && Math.abs(meta.duration - expectedSec) > 4) {
+    return { valid: false, error: `Rendered duration ${meta.duration.toFixed(1)}s does not match requested ${expectedSec}s`, meta };
+  }
+  if (meta.width && meta.height && !(meta.width === 1080 && meta.height === 1920)) {
+    return { valid: false, error: `Rendered resolution ${meta.width}x${meta.height} does not match 1080x1920`, meta };
+  }
+  return { valid: true, meta };
+}
+
 function youtubeData(form: VideoCreationForm, c: Concept) {
   const tag = form.topic.toLowerCase().replace(/\s+/g, "");
   return {
@@ -752,7 +790,7 @@ export async function POST(req: NextRequest) {
     const tmpFinal = join(tmpDir, "final.mp4");
     const { bgSource } = await renderVideo(tmpDir, scenes, form, concept.character, tmpFinal, totalSec);
 
-    const validation = validate(tmpFinal);
+    const validation = await validateOutput(tmpFinal, totalSec);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 500 });
     }
@@ -778,6 +816,7 @@ export async function POST(req: NextRequest) {
       youtube: youtubeData(form, concept),
       aiSource: concept.source ?? "template",
       backgroundSource: bgSource,
+      validation: validation.meta,
       tokensUsed: usage.totalTokens,
       contextCompacted: compacted,
     };
@@ -785,7 +824,11 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     rmSync(tmpDir, { recursive: true, force: true });
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Generation failed", retry: true },
+      {
+        error: e instanceof Error ? sanitizeError(e.message) : "Generation failed",
+        hint: "Check /api/health for provider status. TTS and image steps fall back automatically; FFmpeg must be installed.",
+        retry: true,
+      },
       { status: 500 }
     );
   }
