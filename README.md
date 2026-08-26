@@ -6,22 +6,21 @@ AI-powered meme video creation studio for the YouTube channel "MemesMaterial".
 
 1. **Install**: Run `install.bat` - verifies Node.js/npm, installs dependencies, creates `.env`
 2. **Start**: Run `start.bat` - launches at `http://localhost:3000`
-3. **Create**: Select topic/category/language/style, click **CREATE 60-SECOND VIDEO**
+3. **Create**: Select topic/category/language/style and duration (25s or 60s), click **CREATE VIDEO**
 4. **Download**: Preview and download the generated MP4
 
 ---
 
 ## Overview
 
-MemesMaterial Studio is a web application that allows you to generate complete **60-second meme videos** for YouTube. The application handles the entire video creation pipeline entirely from AI-generated original content:
+MemesMaterial Studio is a web application that generates **vertical short-form meme videos** (and standalone meme images) for YouTube Shorts / social media. The application handles the entire creation pipeline from AI-generated original content:
 
-- Meme concept generation
-- Script writing (60s, scene-divided)
-- Visual generation (original AI images per scene)
-- Voice-over/dialogue (AI TTS in selected language)
-- Subtitle creation (synchronized, burn-in compatible)
-- Audio mixing (background music + sound effects)
-- FFmpeg-based MP4 assembly (1920×1080, 30fps, exactly 60s)
+- Meme concept generation (via OmniRoute / NVIDIA / OpenRouter free models)
+- Script writing (10 fast-paced scenes)
+- Visual generation (original AI images per scene, matched to the script)
+- Voice-over narration (Windows System.Speech locally, hosted TTS on Netlify)
+- FFmpeg-based MP4 assembly (1080×1920, 30fps, 25s or 60s)
+- Standalone 1080×1920 meme image generation (`/meme-image`)
 - YouTube publishing data generation
 
 ---
@@ -29,21 +28,26 @@ MemesMaterial Studio is a web application that allows you to generate complete *
 ## ✨ Features
 
 ### Video Creation
-- **60-second videos** in **1920×1080** at **30 FPS** (16:9 aspect ratio)
+- **Vertical Shorts format**: **1080×1920** (9:16) at **30 FPS**
+- **Selectable duration**: **25s or 60s** per video (10 scenes, pacing adapts)
 - **MP4 format** - YouTube-ready and downloadable
 - **20+ content categories**: Everyday Life, Technology, AI, Work/Office, College, Friendship, Family, Relationships, Gaming, Movies/pop culture, Internet/social media, Indian/South Indian culture, Travel, Vehicles, Random fun, Thoughts, Opinions, Ideas, Trends
 - **6 styles**: Meme, Cinematic Meme, Reaction, Story, Absurd, Relatable
 - **3 languages**: English, Tamil-English, Hinglish
 
-### Production Pipeline (1→8)
-1. **Concept** - Original meme concept generation
-2. **Script** - 60-second script divided into 5 scenes
-3. **Visuals** - Original generated visuals for each scene (no watermarks, no stock images)
-4. **Voice** - AI voice-over in selected language
-5. **Subtitles** - Synchronized subtitles throughout dialogue/narration
-6. **Audio** - Copyright-safe background music + sound effects
-7. **Editing** - Professional meme-style cuts, zooms, transitions, motion graphics
-8. **Rendering** - FFmpeg-assembled MP4 validated for specs
+### Production Pipeline
+1. **Concept** - Original meme concept + fixed main character via AI (template fallback)
+2. **Script** - 10 fast-paced scenes with on-screen text, narration, and visual prompts
+3. **Visuals** - AI illustration per scene (OpenRouter image models → image provider → Pollinations), with gradient fallback
+4. **Voice** - Narration TTS (hosted OpenAI-compatible TTS, Windows System.Speech locally, or silent track)
+5. **Text overlays** - Floating display-font quotes and spaced kicker captions rendered by FFmpeg
+6. **Editing** - Slow pan/drift camera feel per scene, film grain + vignette
+7. **Rendering** - Single-pass FFmpeg concat assembly, validated for size
+
+### Meme Image Generator (`/meme-image`)
+- Turns any topic into a ready-to-post **1080×1920 meme image**
+- AI caption with recent-caption deduplication
+- AI background matched to the joke scene (procedural/gradient fallback)
 
 ### 7-Day Content System
 - Generate batches of **7 completely different videos**
@@ -87,9 +91,8 @@ This script:
 - Sets up the project environment
 
 **Requirements:**
-- Node.js v18+ (verified working: v24.18.0)
-- npm v10+ (verified working: v11.16.0)
-- Windows OS (batch files optimized for Windows)
+- Node.js v20+ (Netlify builds on Node 22)
+- npm v10+
 
 ---
 
@@ -132,14 +135,21 @@ Edit `.env` with your API keys:
 ```
 TEXT_AI_KEY=your_text_ai_provider_key
 IMAGE_GEN_KEY=your_image_generation_provider_key  
-TTS_KEY=your_text_to_speech_provider_key
-MUSIC_SFX_KEY=your_music_sfx_provider_key
+IMAGE_GEN_BASE_URL=your_image_generation_base_url
+IMAGE_GEN_MODEL=gemini-2.5-flash-image
 OPENROUTER_API_KEY=your_openrouter_api_key
 OPENROUTER_MODEL=stealth/ox-alpha
+OPENROUTER_IMAGE_MODEL=google/gemini-2.5-flash-image-preview
+TTS_KEY=your_text_to_speech_provider_key
+TTS_BASE_URL=
+TTS_MODEL=tts-1
+TTS_VOICE=alloy
+MUSIC_SFX_KEY=your_music_sfx_provider_key
 OMNIROUTE_API_KEY=your_omniroute_api_key
 OMNIROUTE_BASE_URL=http://localhost:20128/v1
 OMNIROUTE_MODEL=your_omniroute_model_id
 NVIDIA_API_KEY=your_nvidia_api_key
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 NVIDIA_MODEL=meta/llama-3.3-70b-instruct
 ```
 
@@ -150,9 +160,9 @@ See `.env.example` for the complete format.
 ## 📋 Usage
 
 1. Open `http://localhost:3000`
-2. **Select** a topic (e.g., "Office Life"), category, language, and style
-3. Click **"CREATE 60-SECOND VIDEO"**
-4. Watch the pipeline progress: **Concept → Script → Visuals → Voice → Subtitles → Editing → Rendering → Complete**
+2. **Select** a topic (e.g., "Office Life"), category, language, style, and duration
+3. Click **"CREATE 25-SECOND VIDEO"** or **"CREATE 60-SECOND VIDEO"**
+4. Watch the pipeline progress: **Concept → Script → Visuals → Voice → Editing → Rendering → Complete**
 5. **Preview** the generated video
 6. **Download** the MP4 file
 7. Use auto-generated YouTube data OR customize manually
@@ -164,18 +174,14 @@ See `.env.example` for the complete format.
 
 | Specification | Value |
 |--------------|-------|
-| **Duration** | Exactly 60 seconds |
-| **Resolution** | 1920 × 1080 |
+| **Duration** | 25s or 60s (selectable) |
+| **Resolution** | 1080 × 1920 |
 | **Frame Rate** | 30 FPS |
-| **Aspect Ratio** | 16:9 |
-| **Format** | MP4 |
+| **Aspect Ratio** | 9:16 (vertical Shorts) |
+| **Format** | MP4 (H.264 + AAC) |
+| **Scenes** | 10 AI-illustrated scenes |
+| **Narration** | TTS voice-over (or silent track when no TTS provider) |
 | **YouTube-ready** | Yes |
-| **Audio** | Synchronized |
-| **Subtitles** | Synchronized, large clean font, properly positioned |
-| **No blank frames** | Verified |
-| **No broken artifacts** | Verified |
-| **No watermarks** | Verified (AI-generated only) |
-| **No duplicate scenes** | Verified |
 
 ---
 
@@ -220,8 +226,8 @@ Everyday Life, Lifestyle, Technology, AI, Work/Office, College, Friendship, Fami
 |-------|-----------|
 | **Frontend** | Next.js + React + TypeScript |
 | **Styling** | Tailwind CSS v4 |
-| **Backend** | Next.js API routes / server actions |
-| **Database** | SQLite (local/dev) / PostgreSQL (planned) |
+| **Backend** | Next.js API routes (serverless-ready) |
+| **Database** | In-memory dedup history (no persistent DB) |
 | **Video Processing** | FFmpeg (assembly, validation, format conversion) |
 | **AI Integration** | Configurable: text AI, image generation, TTS, music/SFX providers |
 
@@ -232,33 +238,37 @@ Everyday Life, Lifestyle, Technology, AI, Work/Office, College, Friendship, Fami
 ```
 memesmaterial-studio/
 ├── .env.example        # Environment variable examples
+├── netlify.toml        # Netlify build config (Node 22, function bundling/timeouts)
 ├── install.bat         # Installation script (Node.js verification, npm install)
 ├── start.bat           # Development server (npm run dev)
 ├── build.bat           # Production build (npm run build)
 ├── tailwind.config.mjs # Tailwind CSS configuration
-├── postcss.config.mjs # PostCSS configuration
+├── postcss.config.mjs  # PostCSS configuration
 ├── next.config.ts      # Next.js configuration
 ├── tsconfig.json       # TypeScript configuration
 ├── package.json        # Dependencies and scripts
 ├── eslint.config.mjs   # ESLint configuration
 ├── README.md           # This file
-├── globals.css         # Global styles with dark theme
+├── assets/
+│   └── fonts/          # Bundled OFL-licensed fonts used by FFmpeg drawtext
 ├── public/             # Static assets
 ├── src/
-│   ├── app/           # Next.js app router pages
-│   │   ├── page.tsx   # Dashboard & video creation form
-│   │   ├── create/    # Create video page
-│   │   ├── library/   # Video library with search/filter
+│   ├── app/            # Next.js app router pages
+│   │   ├── page.tsx    # Dashboard & video creation form
+│   │   ├── create/     # Create video page
+│   │   ├── library/    # Video library with search/filter
 │   │   ├── seven-day-batch/  # 7-video batch generation
-│   │   ├── templates/ # Pre-configured meme templates
-│   │   ├── assets/    # Asset management page
-│   │   └── settings/  # API key configuration
-│   ├── components/    # React components
-│   │   └── ui/        # UI components (Header, Sidebar)
-│   ├── lib/           # Utility libraries and types (types.ts)
-│   └── pages/         # API routes (api/generate/)
-├── generated-videos/   # Output MP4 files (created at runtime)
-└── .gitignore         # Git ignore rules
+│   │   ├── templates/  # Pre-configured meme templates
+│   │   ├── meme-image/ # Standalone meme image generator
+│   │   ├── assets/     # Asset management page
+│   │   ├── settings/   # API key configuration
+│   │   └── api/        # Serverless API routes
+│   │       ├── generate/       # POST - video generation pipeline
+│   │       ├── meme/           # POST - meme image generation
+│   │       └── output/[name]/  # GET  - serves generated artifacts (30 min TTL)
+│   ├── components/     # React components (ui/, video/)
+│   └── lib/            # types.ts, ai-image.ts, runtime.ts (paths/fonts)
+└── .gitignore          # Git ignore rules
 ```
 
 ---
@@ -269,22 +279,22 @@ memesmaterial-studio/
 User Input
     │
     ▼
-[API /api/generate] ──► Concept Generation
-    │                   │
-    ▼                   ▼
-Script Generation ──► Scene Division
-    │                   │
-    ▼                   ▼
-Visual Generation ──► Voice-over (TTS)
-    │                   │
-    ▼                   ▼
-Subtitle Generation ──► Audio Mixing (BGM + SFX)
-    │                   │
-    ▼                   ▼
-FFmpeg Assembly ────► MP4 Validation
+[API /api/generate] ──► Concept Generation (OmniRoute/NVIDIA/OpenRouter, template fallback)
     │
     ▼
-Downloadable Video (1920×1080, 30fps, 60s)
+Script: 10 scenes (text + narration + visual prompt)
+    │
+    ▼
+Visual Generation per scene (AI images, gradient fallback)
+    │
+    ▼
+Narration TTS ──► single WAV track
+    │
+    ▼
+FFmpeg Assembly (pan/drift, text overlays, grain, concat)
+    │
+    ▼
+MP4 Validation ──► served via /api/output/<file> (1080×1920, 30fps, 25s/60s)
 ```
 
 ---
@@ -313,7 +323,7 @@ Each video is checked against the content history to ensure:
 - Different main visual concepts
 - Different titles
 
-History is maintained for 7 days and then cycles.
+History is kept in memory (it resets when the server redeploys or restarts).
 
 ---
 
@@ -341,13 +351,16 @@ Built with ❤️ for meme entertainment.
 
 **Issue: Video generation fails**
 - Check `.env` has valid API keys
-- Ensure FFmpeg is accessible (included in development mode)
-- Verify Node.js version (v18+ required)
+- Ensure FFmpeg is accessible (included via `ffmpeg-static`)
+- Verify Node.js version (v20+ required)
 
 **Issue: MP4 validation fails**
-- Check `generated-videos/` directory has write permissions
-- Ensure previous video files are cleaned up
+- Check disk space in the system temp directory (runtime outputs are written to `<tmp>/memesmaterial/`)
 - Re-run generation - validation is automatic
+
+**Issue: No narration audio**
+- On Windows, System.Speech is used automatically
+- On Netlify, configure `TTS_BASE_URL` + `TTS_KEY` for hosted TTS; otherwise a silent track is used
 
 **Issue: API keys not loading**
 - Ensure `.env` file exists in project root
