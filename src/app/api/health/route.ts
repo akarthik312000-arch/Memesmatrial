@@ -22,14 +22,26 @@ function resolveFfmpeg(): string | null {
   return onPath.status === 0 ? binaryName : null;
 }
 
-function ffmpegInfo(): { found: boolean; version: string | null; source: string } {
+function ffmpegInfo(): { found: boolean; version: string | null; source: string; filters: Record<string, boolean> } {
   const bin = resolveFfmpeg();
-  if (!bin) return { found: false, version: null, source: "none" };
+  if (!bin) return { found: false, version: null, source: "none", filters: {} };
   const res = spawnSync(bin, ["-version"], { windowsHide: true, encoding: "utf8" });
   const first = res.stdout?.split("\n")[0]?.trim() ?? null;
   const version = first ? (first.match(/ffmpeg version (\S+)/)?.[1] ?? first.slice(0, 60)) : null;
   const bundled = bin.includes("ffmpeg-static");
-  return { found: res.status === 0 || Boolean(version), version, source: bundled ? "bundled (ffmpeg-static)" : "system PATH" };
+  // verify the filters our render pipelines depend on exist in this build
+  const flt = spawnSync(bin, ["-hide_banner", "-filters"], { windowsHide: true, encoding: "utf8" });
+  const list = flt.stdout ?? "";
+  const filters: Record<string, boolean> = {};
+  for (const f of ["scale", "crop", "drawtext", "noise", "vignette", "concat", "gradients", "anullsrc", "amix", "adelay", "anoisesrc"]) {
+    filters[f] = new RegExp(`\\s${f}\\s`).test(list);
+  }
+  return {
+    found: res.status === 0 || Boolean(version),
+    version,
+    source: bundled ? "bundled (ffmpeg-static)" : "system PATH",
+    filters,
+  };
 }
 
 export async function GET() {
