@@ -11,11 +11,9 @@ import {
 } from "fs";
 import { join } from "path";
 import { readdirSync } from "fs";
-import ffmpegPath from "ffmpeg-static";
-import { existsSync as fileExists } from "fs";
 import type { VideoCreationForm, Scene } from "@/lib/types";
 import { generateAiImage } from "@/lib/ai-image";
-import { workDir, fontFile } from "@/lib/runtime";
+import { workDir, fontFile, resolveFfmpeg } from "@/lib/runtime";
 
 const FONT_DISPLAY = fontFile("bebas.ttf");
 const FONT_SERIF_I = fontFile("ptserif-italic.ttf");
@@ -33,13 +31,6 @@ const GRAD = [
 ];
 const SRC_FPS = 6; // animated source fps, duplicated to 30 on output
 
-function resolveFfmpeg(): string {
-  if (ffmpegPath && fileExists(ffmpegPath)) return ffmpegPath;
-  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-  const local = join(process.cwd(), "node_modules", "ffmpeg-static", binaryName);
-  if (fileExists(local)) return local;
-  throw new Error("FFmpeg binary not found");
-}
 const FFMPEG: string = resolveFfmpeg();
 
 type Concept = {

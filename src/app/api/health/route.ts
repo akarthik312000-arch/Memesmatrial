@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { spawnSync } from "child_process";
-import ffmpegPath from "ffmpeg-static";
-import { existsSync } from "fs";
-import { join } from "path";
+import { resolveFfmpeg } from "@/lib/runtime";
 
 export const runtime = "nodejs";
 
@@ -11,15 +9,6 @@ type Status = "connected" | "missing" | "keyless";
 function keyStatus(value: string | undefined): Status {
   if (value && !value.startsWith("your_") && value !== "local") return "connected";
   return "missing";
-}
-
-function resolveFfmpeg(): string | null {
-  if (ffmpegPath && existsSync(ffmpegPath)) return ffmpegPath;
-  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-  const local = join(process.cwd(), "node_modules", "ffmpeg-static", binaryName);
-  if (existsSync(local)) return local;
-  const onPath = spawnSync(binaryName === "ffmpeg.exe" ? "ffmpeg" : binaryName, ["-version"], { windowsHide: true });
-  return onPath.status === 0 ? binaryName : null;
 }
 
 function ffmpegInfo(): { found: boolean; version: string | null; source: string; filters: Record<string, boolean> } {
@@ -39,7 +28,7 @@ function ffmpegInfo(): { found: boolean; version: string | null; source: string;
   return {
     found: res.status === 0 || Boolean(version),
     version,
-    source: bundled ? "bundled (ffmpeg-static)" : "system PATH",
+    source: bundled ? "bundled (ffmpeg-static)" : bin === "ffmpeg" ? "system PATH" : bin,
     filters,
   };
 }

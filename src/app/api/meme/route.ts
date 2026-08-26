@@ -2,21 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn, spawnSync } from "child_process";
 import { mkdirSync, readdirSync, existsSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import ffmpegPath from "ffmpeg-static";
-import { existsSync as fileExists } from "fs";
 import { generateAiImage } from "@/lib/ai-image";
-import { workDir, fontFile, sanitizeError } from "@/lib/runtime";
+import { workDir, fontFile, sanitizeError, resolveFfmpeg } from "@/lib/runtime";
 import { addLibraryItem } from "@/lib/store";
 
 export const runtime = "nodejs";
 
-function resolveFfmpeg(): string {
-  if (ffmpegPath && fileExists(ffmpegPath)) return ffmpegPath;
-  const binaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
-  const local = join(process.cwd(), "node_modules", "ffmpeg-static", binaryName);
-  if (fileExists(local)) return local;
-  throw new Error("FFmpeg binary not found");
-}
 const FFMPEG = resolveFfmpeg();
 const FONT_SERIF_I = fontFile("ptserif-italic.ttf");
 const FONT_SCRIPT = fontFile("greatvibes.ttf");
