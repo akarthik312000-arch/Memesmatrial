@@ -36,6 +36,8 @@ type MemeResult = {
   category?: string;
   style?: string;
   language?: string;
+  layout?: "center" | "classic";
+  backgroundSource?: string;
   error?: string;
 };
 
@@ -45,6 +47,7 @@ export default function MemeImagePage() {
   const [style, setStyle] = useState(STYLES[0]);
   const [language, setLanguage] = useState(LANGUAGES[0]);
   const [useAi, setUseAi] = useState(true);
+  const [layout, setLayout] = useState<"center" | "classic">("center");
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,6 +91,7 @@ export default function MemeImagePage() {
           category,
           style,
           language,
+          layout,
           ai: useAi && !imageData,
           image: imageData ?? undefined,
           exact: imageData !== null,
@@ -182,6 +186,21 @@ export default function MemeImagePage() {
               </div>
             </div>
 
+            <div className="mt-4">
+              <label htmlFor="meme-layout" className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-300">
+                Text layout
+              </label>
+              <select
+                id="meme-layout"
+                value={layout}
+                onChange={(e) => setLayout(e.target.value as "center" | "classic")}
+                className={selectCls}
+              >
+                <option value="center">Centered poster (floating quote)</option>
+                <option value="classic">Classic meme (top &amp; bottom text)</option>
+              </select>
+            </div>
+
             {imageData ? (
               <p className="mt-4 text-xs text-gray-400">
                 Exact mode: your content is used verbatim on your image — no AI rewriting.
@@ -219,6 +238,7 @@ export default function MemeImagePage() {
               <p className="mt-1"><span className="font-bold text-white">Quote:</span> {result.quote}</p>
               <p className="mt-1 text-xs uppercase tracking-wider text-gray-500">
                 {result.category} · {result.style} · {result.language}
+                {result.backgroundSource ? ` · bg: ${result.backgroundSource}` : ""}
               </p>
             </div>
           )}
@@ -239,7 +259,7 @@ export default function MemeImagePage() {
                 />
                 <a
                   href={result.url}
-                  download
+                  download={`memesmaterial-${result.url?.split("/").pop() ?? "meme.jpg"}`}
                   className="btn mt-4 inline-block px-6 py-2 font-black uppercase tracking-wider"
                 >
                   Download Image

@@ -78,7 +78,7 @@ export default function CreatePage() {
     <div className="min-h-screen text-white p-8">
       <h1 className="text-4xl font-bold mb-2">Create Video</h1>
       <p className="text-gray-400 mb-8">
-        Generate a complete 25 or 60-second meme video (1920×1080, 30 FPS, MP4)
+        Generate a complete 25 or 60-second vertical meme video (1080×1920, 30 FPS, MP4)
       </p>
 
       <form onSubmit={handleSubmit} className="max-w-2xl space-y-6">

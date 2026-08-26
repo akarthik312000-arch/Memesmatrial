@@ -238,6 +238,7 @@ export async function POST(req: NextRequest) {
     const category = String(body.category ?? "Random fun").slice(0, 40);
     const style = String(body.style ?? "Meme").slice(0, 30);
     const language = String(body.language ?? "English").slice(0, 20);
+    const layout = body.layout === "classic" ? "classic" : "center";
 
     // user-provided image: use it as the background exactly as-is
     const uploaded =
@@ -287,20 +288,48 @@ export async function POST(req: NextRequest) {
 
     let chain =
       `[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920`;
-    if (kicker) {
-      chain +=
-        `,drawtext=fontfile='${FONT_SERIF_I}':text='${escDraw(kicker.toUpperCase().split("").join(" "))}'` +
-        `:fontcolor=white@0.92:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=36` +
-        `:x='(w-text_w)/2':y='560'`;
-    }
-    wrapText(quote, 20, 4).forEach((line, li) => {
-      chain +=
-        `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
-        `:fontcolor=white:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=124` +
-        `:x='(w-text_w)/2':y='${640 + li * 145}+${phase.toFixed(2)}*0'`;
-    });
-    chain += `,drawtext=fontfile='${FONT_SCRIPT}':text='MemesMaterial'` +
+    const watermark =
+      `,drawtext=fontfile='${FONT_SCRIPT}':text='MemesMaterial'` +
       `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=58:x=52:y=1790`;
+
+    if (layout === "classic") {
+      // classic meme layout: uppercase text pinned to top and bottom with thick border
+      const lines = wrapText(quote.toUpperCase(), 16, 6);
+      const split = Math.ceil(lines.length / 2);
+      const top = lines.slice(0, split);
+      const bottom = lines.slice(split);
+      top.forEach((line, li) => {
+        chain +=
+          `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
+          `:fontcolor=white:borderw=7:bordercolor=black` +
+          `:fontsize=118:x=(w-text_w)/2:y='${70 + li * 140}'`;
+      });
+      if (bottom.length) {
+        const startY = 1830 - bottom.length * 140;
+        bottom.forEach((line, li) => {
+          chain +=
+            `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
+            `:fontcolor=white:borderw=7:bordercolor=black` +
+            `:fontsize=118:x=(w-text_w)/2:y='${startY + li * 140}'`;
+        });
+      }
+      chain += watermark;
+    } else {
+      // centered poster layout
+      if (kicker) {
+        chain +=
+          `,drawtext=fontfile='${FONT_SERIF_I}':text='${escDraw(kicker.toUpperCase().split("").join(" "))}'` +
+          `:fontcolor=white@0.92:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=36` +
+          `:x='(w-text_w)/2':y='560'`;
+      }
+      wrapText(quote, 20, 4).forEach((line, li) => {
+        chain +=
+          `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
+          `:fontcolor=white:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=124` +
+          `:x='(w-text_w)/2':y='${640 + li * 145}+${phase.toFixed(2)}*0'`;
+      });
+      chain += watermark;
+    }
     chain += `,noise=alls=5:allf=t,vignette=PI/4.5[v]`;
 
     await runProc(
@@ -318,6 +347,7 @@ export async function POST(req: NextRequest) {
       category,
       style,
       language,
+      layout,
       backgroundSource: bg.source,
       createdAt: new Date().toISOString(),
     });
