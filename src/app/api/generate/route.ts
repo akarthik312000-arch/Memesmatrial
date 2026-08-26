@@ -1,5 +1,5 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import {
   mkdirSync,
   writeFileSync,
@@ -243,7 +243,14 @@ function runProc(cmd: string, args: string[], timeoutMs = 180000): Promise<void>
     const p = spawn(cmd, args, { windowsHide: true });
     let err = "";
     const timer = setTimeout(() => {
-      p.kill();
+      // kill the whole process tree — plain kill() leaves children alive on Windows
+      if (p.pid) {
+        if (process.platform === "win32") {
+          spawnSync("taskkill", ["/PID", String(p.pid), "/T", "/F"], { windowsHide: true });
+        } else {
+          p.kill("SIGKILL");
+        }
+      }
       reject(new Error(`process timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     p.stderr.on("data", (d: Buffer) => {
@@ -354,6 +361,25 @@ function buildScenes(c: Concept): Array<Scene & { _sub?: string }> {
   }));
 }
 
+/** instant gradient scene set (no AI calls) — used by Ghost Mode (10x fast render) */
+async function gradientSceneSet(dir: string, count: number): Promise<string[]> {
+  mkdirSync(dir, { recursive: true });
+  await Promise.all(
+    Array.from({ length: count }, (_, i) => async () => {
+      const p = join(dir, `ghost_${i}.png`);
+      if (existsSync(p)) return;
+      await runProc(
+        FFMPEG,
+        ["-y", "-f", "lavfi",
+         "-i", `gradients=s=1188x2112:c0=${GRAD[i % GRAD.length][0]}:c1=${GRAD[i % GRAD.length][1]}:type=linear:d=1`,
+         "-frames:v", "1", "-update", "1", p],
+        60000
+      );
+    }).map((fn) => fn())
+  );
+  return Array.from({ length: count }, (_, i) => join(dir, `ghost_${i}.png`));
+}
+
 /**
  * AI-generated background per scene (matched to each scene's script content),
  * generated in parallel. Falls back to the procedural generator for any
@@ -363,8 +389,12 @@ async function generateAiSceneSet(
   dir: string,
   scenes: Array<Scene & { _visual?: string }>,
   form: VideoCreationForm,
-  character?: string
+  character?: string,
+  ghostMode = false
 ): Promise<{ paths: string[]; source: string }> {
+  if (ghostMode) {
+    return { paths: await gradientSceneSet(join(dir, "ghost"), scenes.length), source: "ghost" };
+  }
   mkdirSync(dir, { recursive: true });
   const hint =
     form.style === "Cinematic Meme"
@@ -587,7 +617,7 @@ async function renderVideo(
   const bgRoot = workDir("bg-cache");
   cleanupSceneSets(bgRoot);
   const setDir = join(bgRoot, `set-${Date.now()}`);
-  const { paths: bgs, source: bgSource } = await generateAiSceneSet(setDir, scenes, form, character);
+  const { paths: bgs, source: bgSource } = await generateAiSceneSet(setDir, scenes, form, character, form.fast === true);
 
   // per-scene duration adapts to scene count so total matches the requested duration
   const secPerScene = totalSec / scenes.length;

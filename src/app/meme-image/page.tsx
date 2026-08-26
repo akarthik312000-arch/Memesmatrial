@@ -50,6 +50,10 @@ export default function MemeImagePage() {
   const [useAi, setUseAi] = useState(true);
   const [layout, setLayout] = useState<"center" | "classic">("center");
   const [aspect, setAspect] = useState("9:16");
+  const [godMode, setGodMode] = useState(false);
+  const [fontSize, setFontSize] = useState(1);
+  const [textPosition, setTextPosition] = useState<"top" | "middle" | "bottom">("middle");
+  const [watermark, setWatermark] = useState(true);
   const [imageData, setImageData] = useState<string | null>(null);
   const [imageName, setImageName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -98,6 +102,7 @@ export default function MemeImagePage() {
           ai: useAi && !imageData,
           image: imageData ?? undefined,
           exact: imageData !== null,
+          ...(godMode ? { fontSize, textPosition, watermark } : {}),
         }),
       });
       const data = await res.json();
@@ -214,6 +219,58 @@ export default function MemeImagePage() {
                 <option value="1:1">1:1 — Square (1080×1080)</option>
               </select>
             </div>
+
+            <label className="mt-4 flex cursor-pointer items-center gap-3 text-sm font-bold text-amber-300">
+              <input
+                type="checkbox"
+                checked={godMode}
+                onChange={(e) => setGodMode(e.target.checked)}
+                className="h-4 w-4 accent-amber-400"
+              />
+              ⚡ GOD MODE — advanced text controls
+            </label>
+
+            {godMode && (
+              <div className="mt-3 space-y-4 rounded-lg border border-amber-400/30 bg-amber-400/5 p-4">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-300">
+                    Font size ({fontSize.toFixed(2)}×)
+                  </label>
+                  <input
+                    type="range"
+                    min={0.6}
+                    max={1.6}
+                    step={0.05}
+                    value={fontSize}
+                    onChange={(e) => setFontSize(Number(e.target.value))}
+                    className="w-full accent-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-300">
+                    Text position
+                  </label>
+                  <select
+                    value={textPosition}
+                    onChange={(e) => setTextPosition(e.target.value as "top" | "middle" | "bottom")}
+                    className={selectCls}
+                  >
+                    <option value="top">Top</option>
+                    <option value="middle">Middle</option>
+                    <option value="bottom">Bottom</option>
+                  </select>
+                </div>
+                <label className="flex cursor-pointer items-center gap-3 text-sm text-gray-300">
+                  <input
+                    type="checkbox"
+                    checked={watermark}
+                    onChange={(e) => setWatermark(e.target.checked)}
+                    className="h-4 w-4 accent-amber-400"
+                  />
+                  Show MemesMaterial watermark
+                </label>
+              </div>
+            )}
 
             {imageData ? (
               <p className="mt-4 text-xs text-gray-400">

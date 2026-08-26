@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { mkdirSync, readdirSync, existsSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import ffmpegPath from "ffmpeg-static";
@@ -44,7 +44,16 @@ function runProc(cmd: string, args: string[], timeoutMs: number): Promise<void> 
     let err = "";
     p.stderr?.on("data", (d) => { err += d; });
     p.on("error", reject);
-    const timer = setTimeout(() => { p.kill(); reject(new Error("timeout")); }, timeoutMs);
+    const timer = setTimeout(() => {
+      if (p.pid) {
+        if (process.platform === "win32") {
+          spawnSync("taskkill", ["/PID", String(p.pid), "/T", "/F"], { windowsHide: true });
+        } else {
+          p.kill("SIGKILL");
+        }
+      }
+      reject(new Error("timeout"));
+    }, timeoutMs);
     p.on("close", (code) => {
       clearTimeout(timer);
       if (code === 0) resolve();
@@ -250,6 +259,13 @@ export async function POST(req: NextRequest) {
     const aspect = ASPECTS[body.aspect] ? String(body.aspect) : "9:16";
     const [W, H] = ASPECTS[aspect];
 
+    // god mode controls
+    const fontScale = Math.min(1.6, Math.max(0.6, Number(body.fontSize) || 1));
+    const showWatermark = body.watermark !== false;
+    const position = ["top", "middle", "bottom"].includes(body.textPosition)
+      ? String(body.textPosition)
+      : "middle";
+
     // user-provided image: use it as the background exactly as-is
     const uploaded =
       typeof body.image === "string" && body.image.startsWith("data:image/")
@@ -298,45 +314,52 @@ export async function POST(req: NextRequest) {
 
     let chain =
       `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
-    const watermark =
-      `,drawtext=fontfile='${FONT_SCRIPT}':text='MemesMaterial'` +
-      `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=58:x=52:y=${H - 130}`;
+    const watermark = showWatermark
+      ? `,drawtext=fontfile='${FONT_SCRIPT}':text='MemesMaterial'` +
+        `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=${Math.round(58 * fontScale)}:x=52:y=${H - 130}`
+      : "";
+    const posTop = Math.round(H * (position === "top" ? 0.08 : position === "bottom" ? 0.66 : 0.33));
+    const quoteSize = Math.round(124 * fontScale);
+    const quoteLine = Math.round(145 * fontScale);
 
     if (layout === "classic") {
       // classic meme layout: uppercase text pinned to top and bottom with thick border
-      const lines = wrapText(quote.toUpperCase(), 16, 6);
+      const lines = wrapText(quote.toUpperCase(), Math.round(16 / fontScale), 6);
       const split = Math.ceil(lines.length / 2);
       const top = lines.slice(0, split);
       const bottom = lines.slice(split);
+      const clsSize = Math.round(118 * fontScale);
+      const clsLine = Math.round(140 * fontScale);
       top.forEach((line, li) => {
         chain +=
           `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
           `:fontcolor=white:borderw=7:bordercolor=black` +
-          `:fontsize=118:x=(w-text_w)/2:y='${Math.round(H * 0.04) + li * 140}'`;
+          `:fontsize=${clsSize}:x=(w-text_w)/2:y='${Math.round(H * 0.04) + li * clsLine}'`;
       });
       if (bottom.length) {
-        const startY = Math.round(H * 0.95) - bottom.length * 140;
+        const startY = Math.round(H * 0.95) - bottom.length * clsLine;
         bottom.forEach((line, li) => {
           chain +=
             `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
             `:fontcolor=white:borderw=7:bordercolor=black` +
-            `:fontsize=118:x=(w-text_w)/2:y='${startY + li * 140}'`;
+            `:fontsize=${clsSize}:x=(w-text_w)/2:y='${startY + li * clsLine}'`;
         });
       }
       chain += watermark;
     } else {
-      // centered poster layout
+      // centered poster layout with god-mode position control
       if (kicker) {
+        const kickerY = Math.max(Math.round(H * 0.03), posTop - Math.round(70 * fontScale));
         chain +=
           `,drawtext=fontfile='${FONT_SERIF_I}':text='${escDraw(kicker.toUpperCase().split("").join(" "))}'` +
-          `:fontcolor=white@0.92:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=36` +
-          `:x='(w-text_w)/2':y='${Math.round(H * 0.29)}'`;
+          `:fontcolor=white@0.92:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=${Math.round(36 * fontScale)}` +
+          `:x='(w-text_w)/2':y='${kickerY}'`;
       }
-      wrapText(quote, 20, 4).forEach((line, li) => {
+      wrapText(quote, Math.round(20 / fontScale), 4).forEach((line, li) => {
         chain +=
           `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
-          `:fontcolor=white:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=124` +
-          `:x='(w-text_w)/2':y='${Math.round(H * 0.33) + li * 145}+${phase.toFixed(2)}*0'`;
+          `:fontcolor=white:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=${quoteSize}` +
+          `:x='(w-text_w)/2':y='${posTop + li * quoteLine}+${phase.toFixed(2)}*0'`;
       });
       chain += watermark;
     }
@@ -361,6 +384,9 @@ export async function POST(req: NextRequest) {
       aspect,
       width: W,
       height: H,
+      fontSize: fontScale,
+      textPosition: position,
+      watermark: showWatermark,
       backgroundSource: bg.source,
       createdAt: new Date().toISOString(),
     });

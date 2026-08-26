@@ -42,6 +42,7 @@ export default function CreatePage() {
     style: "Meme",
   });
   const [busy, setBusy] = useState(false);
+  const [ghost, setGhost] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
@@ -53,13 +54,13 @@ export default function CreatePage() {
     setResult(null);
     const timer = setInterval(
       () => setStep((s) => (s < STEPS.length - 2 ? s + 1 : s)),
-      2500
+      ghost ? 800 : 2500
     );
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, fast: ghost }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Generation failed");
@@ -133,12 +134,22 @@ export default function CreatePage() {
           </div>
         </div>
 
+        <label className="flex cursor-pointer items-center gap-3 text-sm font-bold text-cyan-300">
+          <input
+            type="checkbox"
+            checked={ghost}
+            onChange={(e) => setGhost(e.target.checked)}
+            className="h-4 w-4 accent-cyan-400"
+          />
+          👻 GHOST MODE (10x) — skip AI scene images, render with instant gradient scenes
+        </label>
+
         <button
           type="submit"
           disabled={busy}
           className="btn w-full py-3 rounded font-medium transition-colors disabled:opacity-50"
         >
-          {busy ? "GENERATING..." : "CREATE 60-SECOND VIDEO"}
+          {busy ? "GENERATING..." : `CREATE ${form.durationSec === 60 ? "60" : "25"}-SECOND VIDEO${ghost ? " (GHOST)" : ""}`}
         </button>
       </form>
 

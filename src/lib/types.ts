@@ -13,6 +13,8 @@ export interface VideoCreationForm {
   language: "English" | "Tamil-English" | "Hinglish";
   style: "Meme" | "Cinematic Meme" | "Reaction" | "Story" | "Absurd" | "Relatable";
   durationSec?: 25 | 60;
+  /** Ghost Mode (10x): skip AI scene images, render with instant gradient scenes */
+  fast?: boolean;
 }
 
 export interface Scene {
