@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { spawn, spawnSync } from "child_process";
 import { mkdirSync, readdirSync, existsSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
-import { generateAiImage } from "@/lib/ai-image";
+import { generateAiImage, generateAiMemeImage } from "@/lib/ai-image";
+import { buildMemeImagePrompt, MEME_IMAGE_SYSTEM_PROMPT } from "@/lib/meme-prompt";
 import { workDir, fontFile, sanitizeError, resolveFfmpeg } from "@/lib/runtime";
 import { addLibraryItem } from "@/lib/store";
 
@@ -218,6 +219,37 @@ async function makeBackground(visualPrompt: string, style: string | undefined): 
   }
 }
 
+/**
+ * Full meme image (joke-aware composition with the exact text rendered by the
+ * image model) per the house meme prompt; null when no capable provider.
+ */
+async function makeBakedMeme(args: {
+  concept: string;
+  quote: string;
+  kicker: string;
+  category: string;
+  style: string;
+  language: string;
+  layout: string;
+  aspect: string;
+}): Promise<{ path: string; source: string } | null> {
+  const setDir = workDir("bg-cache", `bg-${Date.now()}`);
+  return generateAiMemeImage(
+    buildMemeImagePrompt({
+      concept: args.concept,
+      text: args.quote,
+      kicker: args.kicker,
+      category: args.category,
+      style: args.style,
+      language: args.language,
+      layout: args.layout === "classic" ? "classic" : "center",
+      aspect: args.aspect,
+    }),
+    setDir,
+    MEME_IMAGE_SYSTEM_PROMPT
+  );
+}
+
 /** persist a user-uploaded data-URL image; returns path or null when invalid */
 async function saveUploadedImage(dataUrl: string): Promise<string | null> {
   const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/);
@@ -298,11 +330,32 @@ export async function POST(req: NextRequest) {
     captionHistory.push(quote);
     while (captionHistory.length > CAPTION_HISTORY_LIMIT) captionHistory.shift();
 
-    // background: uploaded image wins, otherwise AI image matched to the prompt
+    // background: uploaded image wins, otherwise a joke-aware AI meme with the
+    // text rendered by the image model; falls back to a textless illustration
+    // composited with FFmpeg drawtext below
     cleanupOldSets();
     const bg = uploaded
-      ? { path: uploaded, source: "upload" }
-      : await makeBackground(visual || `a scene showing the objects and situation from: "${text}" (${category} theme)`, style);
+      ? { path: uploaded, source: "upload", textBaked: false }
+      : await (async () => {
+          if (!exact) {
+            const baked = await makeBakedMeme({
+              concept: text,
+              quote,
+              kicker,
+              category,
+              style,
+              language,
+              layout,
+              aspect,
+            });
+            if (baked) return { ...baked, textBaked: true };
+          }
+          const fb = await makeBackground(
+            visual || `a scene showing the objects and situation from: "${text}" (${category} theme)`,
+            style
+          );
+          return { ...fb, textBaked: false };
+        })();
 
     // compose 1080x1920 image
     const outId = `meme-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -320,7 +373,7 @@ export async function POST(req: NextRequest) {
     const quoteSize = Math.round(124 * fontScale);
     const quoteLine = Math.round(145 * fontScale);
 
-    if (layout === "classic") {
+    if (layout === "classic" && !bg.textBaked) {
       // classic meme layout: uppercase text pinned to top and bottom with thick border
       const lines = wrapText(quote.toUpperCase(), Math.round(16 / fontScale), 6);
       const split = Math.ceil(lines.length / 2);
@@ -344,7 +397,7 @@ export async function POST(req: NextRequest) {
         });
       }
       chain += watermark;
-    } else {
+    } else if (!bg.textBaked) {
       // centered poster layout with god-mode position control
       if (kicker) {
         const kickerY = Math.max(Math.round(H * 0.03), posTop - Math.round(70 * fontScale));
@@ -387,6 +440,7 @@ export async function POST(req: NextRequest) {
       watermark: showWatermark,
       font: body.font ?? "bebas",
       backgroundSource: bg.source,
+      textBaked: bg.textBaked,
       createdAt: new Date().toISOString(),
     };
     await addLibraryItem({

@@ -1,8 +1,13 @@
 import { mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 
+export type AiImageOptions = {
+  /** optional system prompt steering the image model (e.g. meme house style) */
+  system?: string;
+};
+
 /** AI image via OpenRouter image-capable chat model (returns base64 data URL) */
-async function openRouterImage(prompt: string, dir: string): Promise<string | null> {
+async function openRouterImage(prompt: string, dir: string, opts?: AiImageOptions): Promise<string | null> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key || key === "local") return null;
   const models = [
@@ -22,7 +27,10 @@ async function openRouterImage(prompt: string, dir: string): Promise<string | nu
         body: JSON.stringify({
           model,
           modalities: ["image", "text"],
-          messages: [{ role: "user", content: `Generate this image exactly as described: ${prompt}` }],
+          messages: [
+            ...(opts?.system ? [{ role: "system", content: opts.system }] : []),
+            { role: "user", content: `Generate this image exactly as described: ${prompt}` },
+          ],
         }),
         signal: controller.signal,
       });
@@ -103,14 +111,33 @@ async function pollinationsImage(prompt: string, dir: string): Promise<string | 
 /** best available AI image for the prompt; null when every provider fails */
 export async function generateAiImage(
   prompt: string,
-  dir: string
+  dir: string,
+  opts?: AiImageOptions
 ): Promise<{ path: string; source: string } | null> {
   mkdirSync(dir, { recursive: true });
-  const or = await openRouterImage(prompt, dir);
+  const or = await openRouterImage(prompt, dir, opts);
   if (or) return { path: or, source: "openrouter" };
-  const gen = await imageGenProviderImage(prompt, dir);
+  const gen = await imageGenProviderImage(opts?.system ? `${opts.system}\n\n${prompt}` : prompt, dir);
   if (gen) return { path: gen, source: "image-provider" };
   const pol = await pollinationsImage(prompt, dir);
   if (pol) return { path: pol, source: "pollinations" };
+  return null;
+}
+
+/**
+ * Full meme image (visual + exact text baked in) via providers that render
+ * text reliably. Deliberately skips the keyless Pollinations fallback — a
+ * truncated generic prompt cannot honor exact meme wording.
+ */
+export async function generateAiMemeImage(
+  prompt: string,
+  dir: string,
+  system: string
+): Promise<{ path: string; source: string } | null> {
+  mkdirSync(dir, { recursive: true });
+  const or = await openRouterImage(prompt, dir, { system });
+  if (or) return { path: or, source: "openrouter-meme" };
+  const gen = await imageGenProviderImage(`${system}\n\n${prompt}`, dir);
+  if (gen) return { path: gen, source: "image-provider-meme" };
   return null;
 }

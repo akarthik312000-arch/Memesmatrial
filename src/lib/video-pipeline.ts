@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "child_process";
 import {
+  appendFileSync,
   mkdirSync,
   writeFileSync,
   existsSync,
@@ -13,6 +14,7 @@ import { join } from "path";
 import { readdirSync } from "fs";
 import type { VideoCreationForm, Scene } from "@/lib/types";
 import { generateAiImage } from "@/lib/ai-image";
+import { SCENE_VARIETY_GUIDELINES } from "@/lib/meme-prompt";
 import { workDir, fontFile, resolveFfmpeg } from "@/lib/runtime";
 
 const FONT_DISPLAY = fontFile("bebas.ttf");
@@ -31,7 +33,23 @@ const GRAD = [
 ];
 const SRC_FPS = 6; // animated source fps, duplicated to 30 on output
 
+// Cloud-lite: Linux free-tier hosts render smaller/faster; Windows keeps full quality.
+const CLOUD_LITE = process.platform === "linux" || process.env.CLOUD_LITE === "1";
+const CANVAS_W = CLOUD_LITE ? 792 : 1188;
+const CANVAS_H = CLOUD_LITE ? 1408 : 2112;
+const OUT_W = CLOUD_LITE ? 720 : 1080;
+const OUT_H = CLOUD_LITE ? 1280 : 1920;
+const OUT_FPS = CLOUD_LITE ? 24 : 30;
+
 const FFMPEG: string = resolveFfmpeg();
+
+function dbg(msg: string): void {
+  try {
+    appendFileSync(workDir("pipeline-debug.log"), `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    /* ignore */
+  }
+}
 
 type Concept = {
   hook: string;
@@ -366,7 +384,7 @@ async function gradientSceneSet(dir: string, count: number): Promise<string[]> {
     await runProc(
       FFMPEG,
       ["-y", "-f", "lavfi",
-       "-i", `gradients=s=1188x2112:c0=${GRAD[i % GRAD.length][0]}:c1=${GRAD[i % GRAD.length][1]}:type=linear:d=1`,
+       "-i", `gradients=s=${CANVAS_W}x${CANVAS_H}:c0=${GRAD[i % GRAD.length][0]}:c1=${GRAD[i % GRAD.length][1]}:type=linear:d=1`,
        "-frames:v", "1", "-update", "1", p],
       60000
     );
@@ -400,27 +418,24 @@ async function generateAiSceneSet(
     ? `Main character - draw them IDENTICALLY in every scene: ${character}. `
     : "";
 
+  const sceneImagePrompt = (
+    sc: Scene & { _visual?: string },
+    form: VideoCreationForm,
+    hint: string,
+    charLine: string
+  ): string =>
+    `Illustration for a meme video scene. ${charLine}` +
+    `Scene content: ${sc._visual || sc.voiceOver || sc.visualPrompt}. ` +
+    `Topic context: "${form.topic}" (${form.category}). ${hint}. ` +
+    `Every object mentioned must be drawn clearly and be the main focus. ` +
+    `${SCENE_VARIETY_GUIDELINES} ` +
+    `Vertical portrait composition, no text, no watermark.`;
+
   const results = await Promise.allSettled(
-    scenes.map((sc) =>
-      generateAiImage(
-        `Illustration for a meme video scene. ${characterLine}` +
-          `Scene content: ${sc._visual || sc.voiceOver || sc.visualPrompt}. ` +
-          `Topic context: "${form.topic}" (${form.category}). ${hint}. ` +
-          `Every object mentioned must be drawn clearly and be the main focus. ` +
-          `Vertical portrait composition, no text, no watermark.`,
-        join(dir, `ai-${sc.id}`)
-      )
-    )
+    scenes.map((sc) => generateAiImage(sceneImagePrompt(sc, form, hint, characterLine), join(dir, `ai-${sc.id}`)))
   );
 
-  const prompts = scenes.map(
-    (sc) =>
-      `Illustration for a meme video scene. ${characterLine}` +
-      `Scene content: ${sc._visual || sc.voiceOver || sc.visualPrompt}. ` +
-      `Topic context: "${form.topic}" (${form.category}). ${hint}. ` +
-      `Every object mentioned must be drawn clearly and be the main focus. ` +
-      `Vertical portrait composition, no text, no watermark.`
-  );
+  const prompts = scenes.map((sc) => sceneImagePrompt(sc, form, hint, characterLine));
   const paths = results.map((r) => (r.status === "fulfilled" ? r.value?.path ?? null : null));
 
   // bounded sequential retry for failed scenes (parallel bursts often hit rate limits);
@@ -591,34 +606,44 @@ async function renderVideo(
   totalSec: number,
   onProgress?: (stage: string) => void
 ): Promise<{ bgSource: string }> {
-  onProgress?.("Voice");
+  onProgress?.(`Voice`);
+  dbg("tts start");
   const wav = join(dir, "narration.wav");
   await tts(
     scenes.map((s) => s.voiceOver).join(" ... "),
     wav
   );
   // per-scene AI illustrations matched to the script; procedural fallback
-  onProgress?.("Visuals");
+  dbg("tts done");
+  onProgress?.(`Visuals`);
   const bgRoot = workDir("bg-cache");
   cleanupSceneSets(bgRoot);
   const setDir = join(bgRoot, `set-${Date.now()}`);
   const { paths: bgs, source: bgSource } = await generateAiSceneSet(setDir, scenes, form, character, form.fast === true);
 
-  onProgress?.("Rendering");
+  dbg(`backgrounds done ${bgSource}`);
+  onProgress?.(`Rendering`);
   // per-scene duration adapts to scene count so total matches the requested duration
   const secPerScene = totalSec / scenes.length;
   scenes.forEach((s) => { s.duration = secPerScene; });
   const total = totalSec;
+  const n = scenes.length;
 
-  const chains: string[] = [];
-  scenes.forEach((sc, i) => {
+  // Cloud-lite: Linux free-tier hosts render at 720x1280 (~3x faster);
+  // Windows/local keeps full 1080x1920.
+  const W = OUT_W;
+  const H = OUT_H;
+  const fscale = H / 1920;
+
+  // Low-memory rendering: each scene is encoded to its own small segment
+  // (one image stream at a time — fits ~512MB free-tier containers),
+  // then segments are stitched losslessly in a cheap concat pass.
+  const sceneChains: string[] = scenes.map((sc, i) => {
     const sub = escDraw(sc._sub ?? "");
     const phase = (i * Math.PI) / 2.5;
-    // normalize any input size onto an oversized canvas so the drift-crop is valid
     let chain =
-      `[${i}:v]` +
-      `scale=1188:2112:force_original_aspect_ratio=increase,crop=1188:2112` +
-      `,crop=w=1080:h=1920` +
+      `[0:v]` +
+      `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}` +
       `:x='(in_w-out_w)/2'` +
       `:y='(in_h-out_h)/2+(in_h-out_h)/2*sin(t/5+${phase.toFixed(2)})'`;
     // spaced uppercase kicker above the quote (mood-reel style)
@@ -626,40 +651,57 @@ async function renderVideo(
       const spaced = escDraw(String(sc._sub ?? "").toUpperCase().split("").join(" "));
       chain +=
         `,drawtext=fontfile='${FONT_SERIF_I}':text='${spaced}'` +
-        `:fontcolor=white@0.92:borderw=0:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=34` +
+        `:fontcolor=white@0.92:borderw=0:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=${Math.round(34 * fscale)}` +
         `:x='(w-text_w)/2'` +
-        `:y='430+8*sin(1.6*t+${phase.toFixed(2)})'`;
+        `:y='${Math.round(430 * fscale)}+8*sin(1.6*t+${phase.toFixed(2)})'`;
     }
     // main quote in condensed display font, upper third, gentle float
     wrapText(sc.visualPrompt, 20, 3).forEach((line, li) => {
       chain +=
         `,drawtext=fontfile='${FONT_DISPLAY}':text='${escDraw(line)}'` +
-        `:fontcolor=white:borderw=0:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=118` +
+        `:fontcolor=white:borderw=0:shadowx=3:shadowy=3:shadowcolor=black@0.45:fontsize=${Math.round(118 * fscale)}` +
         `:x='(w-text_w)/2'` +
-        `:y='500+${li * 138}+14*sin(1.4*t+${phase.toFixed(2)})'`;
+        `:y='${Math.round(500 * fscale) + li * Math.round(138 * fscale)}+14*sin(1.4*t+${phase.toFixed(2)})'`;
     });
     // script-font channel mark bottom left
     chain +=
       `,drawtext=fontfile='${FONT_SCRIPT}':text='MemesMaterial'` +
-      `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=54:x=48:y=1810`;
+      `:fontcolor=white@0.9:shadowx=2:shadowy=2:shadowcolor=black@0.5:fontsize=${Math.round(54 * fscale)}:x=48:y=${H - Math.round(110 * fscale)}`;
     // film grain + vignette for the cinematic poster feel
-    chain += `,noise=alls=5:allf=t,vignette=PI/4.5[v${i}]`;
-    chains.push(chain);
+    chain += `,noise=alls=5:allf=t,vignette=PI/4.5[v]`;
+    return chain;
   });
 
-  const n = scenes.length;
-  let filterComplex =
-    chains.join(";") +
-    ";" +
-    scenes.map((_, i) => `[v${i}]`).join("") +
-    `concat=n=${n}:v=1:a=0[vout]` +
-    `;[${n}:a]atrim=0:${total},apad=whole_dur=${total}[adry]`;
+  for (let i = 0; i < n; i++) {
+    await runProc(
+      FFMPEG,
+      ["-y", "-loop", "1", "-framerate", String(SRC_FPS), "-t", String(secPerScene),
+       "-i", bgs[i],
+       "-filter_complex", sceneChains[i],
+       "-map", "[v]",
+       "-c:v", "libx264",
+       "-preset", "ultrafast",
+       "-threads", "1",
+       "-r", String(OUT_FPS),
+       "-pix_fmt", "yuv420p",
+       "-an",
+       join(dir, `seg-${i}.mp4`)],
+      300000
+    );
+  }
 
-  const args: string[] = ["-y"];
-  bgs.forEach((p) => {
-    args.push("-loop", "1", "-framerate", String(SRC_FPS), "-t", String(SCENE_SEC), "-i", p);
-  });
-  args.push("-i", wav);
+  const listPath = join(dir, "segments.txt");
+  writeFileSync(
+    listPath,
+    Array.from({ length: n }, (_, i) => `file 'seg-${i}.mp4'`).join("\n")
+  );
+
+  // audio mux pass: stitched video (stream copy) + narration + optional layers
+  let filterComplex = `[1:a]atrim=0:${total},apad=whole_dur=${total}[adry]`;
+  const args: string[] = [
+    "-y", "-f", "concat", "-safe", "0", "-i", listPath,
+    "-i", wav,
+  ];
 
   // optional audio layers: synthesized music bed + whoosh stings at scene boundaries
   const layerChains: string[] = [];
@@ -679,7 +721,7 @@ async function renderVideo(
   if (layerChains.length) {
     const mixed: string[] = ["[adry]"];
     layerChains.forEach((chain, k) => {
-      filterComplex += `;[${n + 1 + k}:a]${chain}[al${k}]`;
+      filterComplex += `;[${2 + k}:a]${chain}[al${k}]`;
       mixed.push(`[al${k}]`);
     });
     filterComplex += `;${mixed.join("")}amix=inputs=${mixed.length}:duration=first:normalize=0[aout]`;
@@ -688,13 +730,9 @@ async function renderVideo(
 
   args.push(
     "-filter_complex", filterComplex,
-    "-map", "[vout]",
+    "-map", "0:v",
     "-map", audioMap,
-    "-c:v", "libx264",
-    "-preset", "ultrafast",
-    "-threads", "2",
-    "-r", "30",
-    "-pix_fmt", "yuv420p",
+    "-c:v", "copy",
     "-c:a", "aac",
     "-ar", "44100",
     "-t", String(total),
@@ -742,8 +780,12 @@ export async function validateOutput(p: string, expectedSec: number): Promise<{ 
   if (meta.duration !== undefined && Math.abs(meta.duration - expectedSec) > 4) {
     return { valid: false, error: `Rendered duration ${meta.duration.toFixed(1)}s does not match requested ${expectedSec}s`, meta };
   }
-  if (meta.width && meta.height && !(meta.width === 1080 && meta.height === 1920)) {
-    return { valid: false, error: `Rendered resolution ${meta.width}x${meta.height} does not match 1080x1920`, meta };
+  if (meta.width && meta.height) {
+    const full = meta.width === 1080 && meta.height === 1920;
+    const lite = CLOUD_LITE && meta.width === 720 && meta.height === 1280;
+    if (!full && !lite) {
+      return { valid: false, error: `Rendered resolution ${meta.width}x${meta.height} does not match ${OUT_W}x${OUT_H}`, meta };
+    }
   }
   return { valid: true, meta };
 }
@@ -822,10 +864,12 @@ export async function runVideoPipeline(
         _visual: s.visual ?? "",
       }));
     } else {
-      opts.onProgress?.("Concept");
+      dbg("concept start");
+  opts.onProgress?.(`Concept`);
       concept = opts.skipConceptAI ? buildConcept(form) : ((await aiConcept(form)) ?? buildConcept(form));
       concept.hook = uniquifyHook(concept.hook);    remember(concept.hook);
-      opts.onProgress?.("Script");
+      dbg(`concept done ${concept.source ?? "template"}`);
+  opts.onProgress?.(`Script`);
       const aiScenes = concept.scenes?.map((s, i) => ({
         id: `scene-${i}`,
         duration: SCENE_SEC,
