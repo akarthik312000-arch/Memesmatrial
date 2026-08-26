@@ -343,22 +343,34 @@ function buildScenes(c: Concept): Array<Scene & { _sub?: string }> {
   }));
 }
 
+/** run tasks with bounded parallelism so low-RAM hosts don't OOM */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+  return results;
+}
+
 /** instant gradient scene set (no AI calls) — used by Ghost Mode (10x fast render) */
 async function gradientSceneSet(dir: string, count: number): Promise<string[]> {
   mkdirSync(dir, { recursive: true });
-  await Promise.all(
-    Array.from({ length: count }, (_, i) => async () => {
-      const p = join(dir, `ghost_${i}.png`);
-      if (existsSync(p)) return;
-      await runProc(
-        FFMPEG,
-        ["-y", "-f", "lavfi",
-         "-i", `gradients=s=1188x2112:c0=${GRAD[i % GRAD.length][0]}:c1=${GRAD[i % GRAD.length][1]}:type=linear:d=1`,
-         "-frames:v", "1", "-update", "1", p],
-        60000
-      );
-    }).map((fn) => fn())
-  );
+  await mapLimit(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
+    const p = join(dir, `ghost_${i}.png`);
+    if (existsSync(p)) return;
+    await runProc(
+      FFMPEG,
+      ["-y", "-f", "lavfi",
+       "-i", `gradients=s=1188x2112:c0=${GRAD[i % GRAD.length][0]}:c1=${GRAD[i % GRAD.length][1]}:type=linear:d=1`,
+       "-frames:v", "1", "-update", "1", p],
+      60000
+    );
+  });
   return Array.from({ length: count }, (_, i) => join(dir, `ghost_${i}.png`));
 }
 
@@ -680,6 +692,7 @@ async function renderVideo(
     "-map", audioMap,
     "-c:v", "libx264",
     "-preset", "ultrafast",
+    "-threads", "2",
     "-r", "30",
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
