@@ -282,6 +282,7 @@ export async function POST(req: NextRequest) {
     // compose 1080x1920 image
     const outId = `meme-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const outPath = workDir("generated", `${outId}.jpg`);
+    mkdirSync(workDir("generated"), { recursive: true });
     const phase = Math.random() * Math.PI;
 
     let chain =
