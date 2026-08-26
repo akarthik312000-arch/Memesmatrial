@@ -23,11 +23,20 @@ Audit date: 2026-08-26. Statuses: 🔴 Critical · 🟠 Important · 🟡 Improv
 | Create page spec text | 🟡 Improvement | Claimed 1920×1080 landscape | 🟡 | Corrected to 1080×1920 |
 | Narration TTS cross-platform | 🟢 Working | Windows-only System.Speech broke hosted deploys | 🟠 | Hosted OpenAI-compatible TTS (`TTS_BASE_URL`) + silent-track fallback |
 
-## Known limitations / roadmap (not implemented by design)
+## Known limitations / roadmap
 
-- **Timeline video editor** (scene reorder/edit/regenerate): large feature — roadmap
-- **Persistent projects/library DB**: history is in-memory per server instance — roadmap
-- **Queue/background jobs**: generation is synchronous; a full 10-scene AI video takes ~5–10 minutes locally (AI image generation dominates) and will exceed Netlify's 100s sync function timeout. Fast paths: uploaded/gradient backgrounds and `ai:false` render in well under the limit — roadmap: job queue + polling
-- **SRT/VTT subtitle export**: burned-in text only currently — roadmap
-- **Music/SFX mixing**: provider config reserved (`MUSIC_SFX_KEY`), not wired into render — roadmap
-- **7-Day batch dedup**: works via shared in-memory history; resets across deploys
+Implemented since first audit (commit bb35463):
+
+- **Job queue** — `POST /api/generate` with `async:true` returns a jobId; `GET /api/jobs/[id]` reports live progress (Queued → Concept → Script → Voice → Visuals → Rendering → Validating)
+- **Timeline editor** (`/editor`) — load any generated video, edit scene text/narration, add/delete/reorder scenes, re-render via `POST /api/render` with QC validation
+- **Library store** — generations persisted to a JSONL store; powers `/api/stats`
+- **Analytics page** (`/analytics`) — totals, weekly activity, recent creations
+- **Subtitle export** — SRT/VTT download buttons on video results
+- **Music bed** — optional synthesized low-volume bed mixed under narration
+- **Font selection** — Bebas / Anton / PT Serif / Cormorant in God Mode
+
+Still open:
+
+- **Netlify sync-function limit**: async jobs run inside the function process, so full-AI videos still need long-timeout plans or true background functions on hosted deploys (works fully locally)
+- **Cross-redeploy persistence**: library/jobs reset when the server instance restarts; a real database remains roadmap
+- **SFX event wiring** per scene (music bed only currently)
