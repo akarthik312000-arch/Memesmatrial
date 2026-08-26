@@ -13,9 +13,9 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Hugging Face Spaces expects the app on port 7860
+# Hugging Face expects 7860; Render/cloud hosts inject PORT dynamically
 ENV PORT=7860
 ENV HOSTNAME=0.0.0.0
 EXPOSE 7860
 
-CMD ["npm", "run", "start", "--", "-p", "7860"]
+CMD ["sh", "-c", "npm run start -- -p ${PORT:-7860}"]

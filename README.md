@@ -128,14 +128,18 @@ Narration TTS: locally on Windows it uses built-in System.Speech. On Netlify, co
 
 Function timeouts are configured to 100 seconds in `netlify.toml`. Video generation can take several minutes; if a generation exceeds the limit, consider a Netlify plan or configuration that supports extended timeouts.
 
-### Deploy To Hugging Face Spaces (free, no function timeout)
+### Deploy To Render (free, no function timeout)
 
-For full-AI videos on a free 24/7 host, deploy the same app as a Docker Space:
+HF Docker Spaces now require PRO, so the recommended free 24/7 host is **Render**:
 
-1. Create a Space at https://huggingface.co/new-space → **Docker** template (blank).
-2. Push this folder to the Space repo (web UI upload or `git push`). The included `Dockerfile` installs FFmpeg, builds the app, and serves it on port 7860.
-3. Add provider keys under **Space settings → Variables and secrets** (`OPENROUTER_API_KEY`, `TTS_BASE_URL`, `TTS_KEY`, optional `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` for persistence).
-4. The Space URL is your production app. It sleeps after ~48h of inactivity and wakes automatically on the next request (cold start ~1 min).
+1. Sign in at https://dashboard.render.com with your GitHub account.
+2. **New → Web Service** → connect the `Memesmatrial` repository (the `render.yaml` blueprint is detected automatically).
+3. Plan: **Free**. Add environment keys under **Environment**: `OPENROUTER_API_KEY`, optional `TTS_BASE_URL`/`TTS_KEY`, optional Upstash vars for persistence.
+4. Deploy. You get a permanent URL like `https://memesmaterial.onrender.com`. The free instance sleeps after 15 min idle and wakes on the next request (~1 min cold start).
+
+Notes:
+- On Linux there is no built-in System.Speech — configure hosted TTS for narration, or videos render with a silent track.
+- Ghost Mode renders in well under a minute; full-AI videos may take several minutes.
 
 Notes:
 - On Linux there is no built-in System.Speech — configure hosted TTS for narration, or videos render with a silent track.
