@@ -45,8 +45,35 @@ export default function MemeImagePage() {
   const [style, setStyle] = useState(STYLES[0]);
   const [language, setLanguage] = useState(LANGUAGES[0]);
   const [useAi, setUseAi] = useState(true);
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imageName, setImageName] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<MemeResult | null>(null);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      setResult({ status: "error", error: "Only PNG, JPG or WebP images are supported" });
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setResult({ status: "error", error: "Image is too large (max 8 MB)" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setImageData(typeof reader.result === "string" ? reader.result : null);
+      setImageName(file.name);
+      setUseAi(false);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearImage() {
+    setImageData(null);
+    setImageName("");
+  }
 
   async function generate() {
     if (!text.trim() || busy) return;
@@ -56,7 +83,15 @@ export default function MemeImagePage() {
       const res = await fetch("/api/meme", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, category, style, language, ai: useAi }),
+        body: JSON.stringify({
+          text,
+          category,
+          style,
+          language,
+          ai: useAi && !imageData,
+          image: imageData ?? undefined,
+          exact: imageData !== null,
+        }),
       });
       const data = await res.json();
       if (!res.ok || data.status === "error") {
@@ -78,8 +113,8 @@ export default function MemeImagePage() {
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <h1 className="text-4xl font-bold mb-2">Meme Image</h1>
       <p className="text-gray-400 mb-6">
-        Turn any topic into a ready-to-post 1080×1920 meme image. Each generation
-        gets a fresh background and a unique caption — no repeats.
+        Turn any topic into a ready-to-post 1080×1920 meme image — or upload your
+        own image and your content is used verbatim on it.
       </p>
 
       <div className="grid gap-8 lg:grid-cols-2">
@@ -97,6 +132,28 @@ export default function MemeImagePage() {
               maxLength={200}
               className={selectCls}
             />
+
+            {imageData ? (
+              <div className="mt-4 flex items-center gap-4 rounded-lg border border-[#ff625e]/40 bg-[#ff625e]/10 p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imageData} alt="Your upload" className="h-16 w-16 rounded object-cover" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-white">{imageName}</p>
+                  <p className="text-xs text-gray-400">Used as the meme background exactly as-is</p>
+                </div>
+                <button
+                  onClick={clearImage}
+                  className="rounded border border-white/20 px-3 py-1 text-xs uppercase tracking-wider text-gray-300 hover:border-red-400 hover:text-red-300"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-white/20 p-4 text-sm text-gray-300 transition hover:border-[#ff625e] hover:text-white">
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFile} className="hidden" />
+                + Upload your own image (optional)
+              </label>
+            )}
 
             <div className="mt-4 grid gap-4 sm:grid-cols-3">
               <div>
@@ -125,15 +182,21 @@ export default function MemeImagePage() {
               </div>
             </div>
 
-            <label className="mt-4 flex cursor-pointer items-center gap-3 text-sm text-gray-300">
-              <input
-                type="checkbox"
-                checked={useAi}
-                onChange={(e) => setUseAi(e.target.checked)}
-                className="h-4 w-4 accent-[#ff625e]"
-              />
-              Polish the caption with AI (uses OpenRouter)
-            </label>
+            {imageData ? (
+              <p className="mt-4 text-xs text-gray-400">
+                Exact mode: your content is used verbatim on your image — no AI rewriting.
+              </p>
+            ) : (
+              <label className="mt-4 flex cursor-pointer items-center gap-3 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={useAi}
+                  onChange={(e) => setUseAi(e.target.checked)}
+                  className="h-4 w-4 accent-[#ff625e]"
+                />
+                Polish the caption with AI (uses OpenRouter)
+              </label>
+            )}
 
             <button
               onClick={generate}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { spawn } from "child_process";
-import { mkdirSync, readdirSync, existsSync, rmSync } from "fs";
+import { mkdirSync, readdirSync, existsSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
 import ffmpegPath from "ffmpeg-static";
 import { existsSync as fileExists } from "fs";
@@ -215,6 +215,19 @@ async function makeBackground(visualPrompt: string, style: string | undefined): 
   }
 }
 
+/** persist a user-uploaded data-URL image; returns path or null when invalid */
+async function saveUploadedImage(dataUrl: string): Promise<string | null> {
+  const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/);
+  if (!m) return null;
+  const buf = Buffer.from(m[2], "base64");
+  if (buf.length < 1000 || buf.length > 12_000_000) return null;
+  const dir = workDir("uploads");
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, `up-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${m[1] === "jpeg" ? "jpg" : m[1]}`);
+  writeFileSync(p, buf);
+  return p;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -226,12 +239,22 @@ export async function POST(req: NextRequest) {
     const style = String(body.style ?? "Meme").slice(0, 30);
     const language = String(body.language ?? "English").slice(0, 20);
 
+    // user-provided image: use it as the background exactly as-is
+    const uploaded =
+      typeof body.image === "string" && body.image.startsWith("data:image/")
+        ? await saveUploadedImage(body.image)
+        : null;
+
+    // exact mode (explicit flag or an uploaded image): content is used verbatim,
+    // no AI rewriting and no caption dedup
+    const exact = body.exact === true || uploaded !== null;
+
     // typography content: AI-polished or raw, deduped against recent captions
     let kicker = "";
     let quote = text;
     let visual = "";
     let duplicate = false;
-    if (body.ai !== false) {
+    if (!exact && body.ai !== false) {
       const normalize = (s: string) =>
         s.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean).slice(0, 5).join(" ");
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -250,11 +273,11 @@ export async function POST(req: NextRequest) {
     captionHistory.push(quote);
     while (captionHistory.length > CAPTION_HISTORY_LIMIT) captionHistory.shift();
 
-    // background: AI image matched to the prompt, procedural as last resort
+    // background: uploaded image wins, otherwise AI image matched to the prompt
     cleanupOldSets();
-    const fallbackVisual =
-      `a scene showing the objects and situation from: "${text}" (${category} theme)`;
-    const bg = await makeBackground(visual || fallbackVisual, style);
+    const bg = uploaded
+      ? { path: uploaded, source: "upload" }
+      : await makeBackground(visual || `a scene showing the objects and situation from: "${text}" (${category} theme)`, style);
 
     // compose 1080x1920 image
     const outId = `meme-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
